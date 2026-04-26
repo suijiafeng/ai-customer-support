@@ -1,0 +1,60 @@
+import { createHmac, scryptSync, timingSafeEqual } from 'node:crypto';
+function b64url(input) {
+    return Buffer.from(input).toString('base64url');
+}
+export function signToken(payload, secret, ttlSeconds = 12 * 3600) {
+    const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+    const body = b64url(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + ttlSeconds }));
+    const sig = createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
+    return `${header}.${body}.${sig}`;
+}
+// SSE 用 ?ticket= 传递凭证（EventSource 无法自定义请求头），60s 短 TTL 避免长效 JWT 进 URL
+export function signSseTicket(payload, secret, ttlSeconds = 60) {
+    return signToken({ ...payload, kind: 'sse' }, secret, ttlSeconds);
+}
+export function verifySseTicket(ticket, secret) {
+    return verifyWithKind(ticket, secret, 'sse');
+}
+/**
+ * 校验客服登录 token。只接受「没有 kind 字段」的令牌：
+ * SSE 票据（kind:'sse'）与访客令牌（kind:'visitor'）同样由 AUTH_SECRET 签名、载荷同样有 sub/exp，
+ * 不区分 kind 的话访客令牌就能直接当客服 Bearer 用（7 天有效、能看接待大厅、能以客服身份回复）。
+ */
+export function verifyToken(token, secret) {
+    return verifyWithKind(token, secret, undefined);
+}
+function verifyWithKind(token, secret, expectedKind) {
+    const parts = String(token || '').split('.');
+    if (parts.length !== 3)
+        return null;
+    const [header, body, sig] = parts;
+    const expected = createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
+    const sigBuf = Buffer.from(sig);
+    const expBuf = Buffer.from(expected);
+    if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf))
+        return null;
+    try {
+        const claims = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+        if (typeof claims.sub !== 'string' || typeof claims.exp !== 'number')
+            return null;
+        if (claims.exp <= Math.floor(Date.now() / 1000))
+            return null;
+        if (claims.kind !== expectedKind)
+            return null; // 令牌种类必须严格匹配，不同用途不可互换
+        if (claims.role !== 'admin')
+            claims.role = 'agent'; // 兼容旧 token
+        return claims;
+    }
+    catch {
+        return null;
+    }
+}
+export function hashPassword(password, salt) {
+    return scryptSync(password, salt, 32).toString('hex');
+}
+export function verifyPassword(password, salt, expectedHash) {
+    const actual = Buffer.from(hashPassword(password, salt), 'hex');
+    const expected = Buffer.from(expectedHash, 'hex');
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+//# sourceMappingURL=jwt.js.map
