@@ -1,8 +1,11 @@
 {
-  "name": "customer-support-bot",
+  "name": "ai-customer-support-chat",
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
