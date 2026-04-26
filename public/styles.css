@@ -189,6 +189,10 @@ button {
   border-color: #ffd0ca;
 }
 
+.queue-card.closed {
+  opacity: 0.68;
+}
+
 .queue-card strong {
   display: block;
   font-size: 14px;
@@ -233,7 +237,7 @@ button {
 
 .chat-shell {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   overflow: hidden;
 }
 
@@ -296,6 +300,40 @@ h2 {
   padding: 0 12px;
 }
 
+.ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.ops-strip {
+  background: #fbfcfe;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ops-strip article {
+  background: #ffffff;
+  min-height: 72px;
+  padding: 13px 16px;
+}
+
+.ops-strip span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ops-strip strong {
+  color: var(--text);
+  display: block;
+  font-size: 24px;
+  line-height: 1;
+  margin-top: 10px;
+}
+
 .messages {
   background:
     linear-gradient(180deg, rgba(247, 249, 252, 0.7), rgba(255, 255, 255, 0.88)),
@@ -324,8 +362,10 @@ h2 {
   box-shadow: 0 10px 24px rgba(23, 32, 51, 0.06);
   line-height: 1.6;
   max-width: min(76%, 680px);
+  overflow-wrap: anywhere;
   padding: 13px 15px;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .bot .bubble {
@@ -577,6 +617,29 @@ dd {
   line-height: 1.4;
 }
 
+.ticket-actions {
+  display: flex;
+  gap: 7px;
+  margin-top: 5px;
+}
+
+.ticket-actions button {
+  background: #ffffff;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 30px;
+  padding: 0 9px;
+}
+
+.ticket-actions button:hover {
+  background: var(--brand-soft);
+  border-color: #b8c8ee;
+  color: var(--brand-dark);
+}
+
 @media (max-width: 1100px) {
   .app {
     grid-template-columns: 220px minmax(420px, 1fr);
@@ -613,8 +676,8 @@ dd {
     flex-direction: column;
   }
 
-  .ghost-button {
-    display: none;
+  .ops-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .bubble {
@@ -643,6 +706,19 @@ dd {
   .agent-body .brand,
   .agent-body .nav {
     display: none;
+  }
+
+  .agent-body .topbar-actions {
+    align-items: stretch;
+  }
+
+  .agent-body .ghost-button {
+    align-items: center;
+    display: flex;
+    font-size: 13px;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0 10px;
   }
 
   .agent-body .chat-shell {
@@ -789,7 +865,7 @@ dd {
   border-radius: 8px;
   box-shadow: 0 28px 70px rgba(23, 32, 51, 0.14);
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
   max-height: calc(100vh - 44px);
   min-height: 0;
   overflow: hidden;
@@ -873,7 +949,7 @@ dd {
   border-bottom: 1px solid var(--line);
   display: grid;
   gap: 12px;
-  grid-template-columns: 0.8fr 1.2fr;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   padding: 14px 22px;
 }
 
@@ -918,6 +994,13 @@ dd {
   box-shadow: 0 0 0 3px rgba(36, 87, 197, 0.12);
 }
 
+.profile-status {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  grid-column: 1 / -1;
+}
+
 .customer-messages {
   background:
     linear-gradient(180deg, rgba(248, 250, 252, 0.94), rgba(255, 255, 255, 0.96)),
@@ -959,7 +1042,7 @@ dd {
   }
 
   .customer-chat {
-    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
     max-height: calc(100vh - 20px);
     min-height: calc(100vh - 20px);
   }
@@ -1133,6 +1216,11 @@ dd {
   width: 30px;
 }
 
+.bot-avatar.human-agent {
+  background: linear-gradient(135deg, #137a4a, #0f5132);
+  box-shadow: 0 2px 8px rgba(19, 122, 74, 0.22);
+}
+
 /* Message Body wrapper */
 .message-body {
   display: flex;
@@ -1199,13 +1287,13 @@ dd {
 }
 
 /* Send button — gradient + hover lift */
-.customer-composer .composer button {
+.customer-composer button {
   background: linear-gradient(135deg, var(--brand), var(--brand-dark));
   box-shadow: 0 2px 8px rgba(36, 87, 197, 0.24);
   transition: opacity 0.14s, transform 0.13s, box-shadow 0.14s;
 }
 
-.customer-composer .composer button:hover {
+.customer-composer button:hover {
   box-shadow: 0 4px 16px rgba(36, 87, 197, 0.36);
   opacity: 0.93;
   transform: translateY(-1px);
@@ -1222,7 +1310,7 @@ dd {
 
 /* Input focus transitions */
 .identity-panel input,
-.customer-composer .composer input {
+.customer-composer input {
   transition: border-color 0.14s, box-shadow 0.14s;
 }
 
