@@ -1,16 +1,40 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import 'emoji-picker-element';
-import { stableAgentId, type AgentIdentity } from './api.js';
+import { clearAuth, getStoredAgent, getToken, type AgentIdentity } from './api.js';
 import { useQueueEvents } from './hooks/useQueueEvents.js';
 import SessionQueue from './components/SessionQueue.js';
 import ChatPanel from './components/ChatPanel.js';
+import Login from './components/Login.js';
+import AgentMenu from './components/AgentMenu.js';
+import TicketsPanel from './components/TicketsPanel.js';
+import MetricsPanel from './components/MetricsPanel.js';
 
 export default function App() {
-  // 开发者身份在组件生命周期内稳定
-  const [agent] = useState<AgentIdentity>(() => ({ id: stableAgentId(), name: '开发者本人' }));
+  // 客服身份来自登录态（JWT），未登录先进登录页
+  const [agent, setAgent] = useState<AgentIdentity | null>(() =>
+    getToken() ? getStoredAgent() : null
+  );
+
+  if (!agent) {
+    return <Login onLogin={setAgent} />;
+  }
+
+  return <Workstation agent={agent} onLogout={() => { clearAuth(); setAgent(null); }} />;
+}
+
+type View = 'sessions' | 'tickets' | 'metrics';
+
+const VIEWS: Array<{ key: View; label: string }> = [
+  { key: 'sessions', label: '会话接待' },
+  { key: 'tickets', label: '跟进事项' },
+  { key: 'metrics', label: '数据看板' },
+];
+
+function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () => void }) {
   const { sessions } = useQueueEvents();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [queueOpen, setQueueOpen] = useState(false); // 移动端抽屉
+  const [view, setView] = useState<View>('sessions');
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.sessionId === activeId) || null,
@@ -33,19 +57,39 @@ export default function App() {
             aria-expanded={queueOpen}
             onClick={() => setQueueOpen((v) => !v)}
           >☰</button>
-          <span className="brand">AssistFlow 开发者工作台</span>
+          <span className="brand">AssistFlow 客服工作台</span>
+          <nav className="view-tabs" aria-label="功能页签">
+            {VIEWS.map((v) => (
+              <button
+                key={v.key}
+                aria-current={view === v.key}
+                className={view === v.key ? 'active' : ''}
+                onClick={() => setView(v.key)}
+              >
+                {v.label}
+              </button>
+            ))}
+          </nav>
         </div>
-        <span className="me">{agent.name}（访客咨询跟进）</span>
+        <AgentMenu agent={agent} sessions={sessions} onLogout={onLogout} />
       </header>
       <div className="body">
-        <SessionQueue
-          sessions={sessions}
-          activeId={activeId}
-          onSelect={handleSelect}
-          open={queueOpen}
-        />
-        {queueOpen && <div className="queue-overlay" onClick={() => setQueueOpen(false)} aria-hidden="true" />}
-        <ChatPanel session={activeSession} agent={agent} />
+        {view === 'sessions' && (
+          <>
+            <SessionQueue
+              sessions={sessions}
+              activeId={activeId}
+              onSelect={handleSelect}
+              open={queueOpen}
+            />
+            {queueOpen && <div className="queue-overlay" onClick={() => setQueueOpen(false)} aria-hidden="true" />}
+            <ChatPanel session={activeSession} agent={agent} />
+          </>
+        )}
+        {view === 'tickets' && (
+          <TicketsPanel onOpenSession={(id) => { setView('sessions'); handleSelect(id); }} />
+        )}
+        {view === 'metrics' && <MetricsPanel />}
       </div>
     </div>
   );
