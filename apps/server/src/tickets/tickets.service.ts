@@ -83,9 +83,9 @@ export class TicketsService implements OnModuleInit {
     };
 
     this.tickets.push(ticket);
+    // 仅淘汰内存缓存，库保留全量工单历史（淘汰项可按需回读）
     if (this.tickets.length > LIMITS.MAX_TICKETS) {
-      const evicted = this.tickets.splice(0, this.tickets.length - LIMITS.MAX_TICKETS);
-      evicted.forEach((item) => this.store.deleteTicket(item.id));
+      this.tickets.splice(0, this.tickets.length - LIMITS.MAX_TICKETS);
     }
     this.store.saveTicket(ticket);
     return ticket;
@@ -115,6 +115,21 @@ export class TicketsService implements OnModuleInit {
       ticket.resolvedAt = ticket.resolvedAt || now;
     }
 
+    this.store.saveTicket(ticket);
+    return ticket;
+  }
+
+  /** 追加处理备注（按时间累积，最多保留 50 条）。 */
+  addNote(ticket: Ticket, note: { agentId: string; agentName: string; text: string }): Ticket {
+    const entry = {
+      id: randomUUID(),
+      agentId: note.agentId,
+      agentName: note.agentName,
+      text: note.text.trim().slice(0, 500),
+      createdAt: new Date().toISOString(),
+    };
+    ticket.notes = [...(ticket.notes || []), entry].slice(-50);
+    ticket.updatedAt = entry.createdAt;
     this.store.saveTicket(ticket);
     return ticket;
   }

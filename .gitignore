@@ -18,3 +18,11 @@ Thumbs.db
 dist/
 build/
 vite.config.js.timestamp-*.mjs
+
+# 本地 SQLite 数据库文件（含 WAL/SHM）
+*.db
+*.db-wal
+*.db-shm
+
+# 自动生成并持久化的 JWT 签名密钥（未显式配置 AUTH_SECRET 时）
+.auth_secret

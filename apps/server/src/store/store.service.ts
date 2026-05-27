@@ -27,8 +27,9 @@ export class StoreService implements OnModuleInit, OnModuleDestroy {
       await this.store.init();
       this.persisted = await this.store.loadAll();
       if (this.store.enabled) {
+        const backend = (process.env.DB_DRIVER || (process.env.DATABASE_URL ? 'postgres' : 'sqlite')).toLowerCase();
         this.logger.log(
-          `Postgres 持久化已启用，载入 ${this.persisted.sessions.length} 会话 / ${this.persisted.tickets.length} 工单`
+          `${backend} 持久化已启用，载入 ${this.persisted.sessions.length} 会话 / ${this.persisted.tickets.length} 工单`
         );
       }
     } catch (error: any) {
@@ -49,4 +50,17 @@ export class StoreService implements OnModuleInit, OnModuleDestroy {
   deleteConversation = (id: string) => this.store.deleteConversation(id);
   saveTicket = (ticket: Parameters<Store['saveTicket']>[0]) => this.store.saveTicket(ticket);
   deleteTicket = (id: string) => this.store.deleteTicket(id);
+
+  // 单条回读（内存淘汰后仍可从库取回）
+  loadSession = (id: string) => this.store.getSession(id);
+  loadConversation = (id: string) => this.store.getConversation(id);
+  loadTicket = (id: string) => this.store.getTicket(id);
+
+  /** 持久化健康：是否出现过写失败 + 详情 */
+  get degraded(): boolean {
+    return this.store.stats().writeErrors > 0;
+  }
+  stats() {
+    return this.store.stats();
+  }
 }

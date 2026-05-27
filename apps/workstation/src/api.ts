@@ -8,9 +8,18 @@ export const newId = () => crypto.randomUUID();
 /** UI 用消息：在服务端 actor/role 基础上统一补出 from 区分左右 */
 export type UiMessage = Message & { from: string };
 
+export type AgentRole = 'agent' | 'admin';
+
 export interface AgentIdentity {
   id: string;
   name: string;
+  role?: AgentRole;
+}
+
+/** 换取 60s SSE 短票据，供 EventSource ?ticket= 使用（避免长效 JWT 进 URL/日志） */
+export async function fetchSseTicket(): Promise<string> {
+  const data = await requestJson<{ ticket: string }>('/api/auth/sse-ticket', { method: 'POST' });
+  return data.ticket;
 }
 
 export class ApiError extends Error {
