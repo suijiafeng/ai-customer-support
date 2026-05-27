@@ -72,12 +72,20 @@ async function streamChat(
   payload: unknown,
   onDelta: (text: string) => void
 ): Promise<any> {
-  const response = await fetch(`${apiBase}/api/chat/stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok || !response.body) throw new Error(`stream failed: ${response.status}`);
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}/api/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (err: any) {
+    // 请求根本没到服务端：调用方可以安全重试
+    throw Object.assign(new Error(err?.message || 'request failed'), { phase: 'request' });
+  }
+  if (!response.ok || !response.body) {
+    throw Object.assign(new Error(`stream failed: ${response.status}`), { phase: 'request' });
+  }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -135,7 +143,8 @@ async function streamChat(
   drain();
   if (buffer.trim()) handleBlock(buffer);
 
-  if (!done) throw new Error('stream ended without done event');
+  // 流已建立但中途断开/异常：服务端可能已在处理，调用方不应盲目重发
+  if (!done) throw Object.assign(new Error('stream ended without done event'), { phase: 'stream' });
   return done;
 }
 
@@ -174,6 +183,8 @@ export default function Widget({ apiBase, title, siteKey }: WidgetProps) {
   const emojiRef = useRef<HTMLElement | null>(null);
   const sessionEvents = useRef<EventSource | null>(null);
   const sessionIdRef = useRef(''); // 访客标识：首次发送消息后才惰性生成，存于本地并带完整性校验
+  // 本次发送的乐观消息对（访客消息 id 即 clientMessageId + 流式 AI 气泡 id）
+  const inflightRef = useRef<{ userId: string; aiId: string } | null>(null);
   const pdown = useRef<{ px: number; py: number; x: number; y: number } | null>(null);
   const atBottomRef = useRef(true);
 
@@ -189,7 +200,23 @@ export default function Widget({ apiBase, title, siteKey }: WidgetProps) {
       const merged = sessionIdRef.current
         ? messageArchive.merge(sessionIdRef.current, list)
         : list;
-      setMessagesState(normalizeMessages(merged));
+      setMessagesState((current) => {
+        const next = normalizeMessages(merged);
+        if (force) return next;
+        // 非权威更新（SSE 快照等）：保留服务端尚未确认的本地乐观消息，
+        // 避免发送中收到旧快照把「我的消息 + 流式 AI 气泡」整体冲掉
+        const confirmed = new Set<string>();
+        for (const m of Array.isArray(list) ? list : []) {
+          if (m?.id) confirmed.add(String(m.id));
+          if (m?.clientMessageId) confirmed.add(String(m.clientMessageId));
+        }
+        for (const m of next) confirmed.add(m.id);
+        // 服务端把「访客消息 + AI 回复」一起落库：访客消息一旦确认，配对的流式气泡同样让位
+        const inflight = inflightRef.current;
+        if (inflight && confirmed.has(inflight.userId)) confirmed.add(inflight.aiId);
+        const optimistic = current.filter((m) => !(m as any).actor && !confirmed.has(m.id));
+        return optimistic.length ? [...next, ...optimistic] : next;
+      });
       if (force || atBottomRef.current) scrollToBottom();
     },
     [scrollToBottom]
@@ -242,16 +269,18 @@ export default function Widget({ apiBase, title, siteKey }: WidgetProps) {
     setSending(true);
     try {
       await ensureSession();
+      // 乐观渲染：先放上访客消息和一个空的 AI 气泡，流式增量往里填
+      const userMsgId = newId();
       const payload = {
         sessionId: sessionIdRef.current,
         message: text,
         attachments,
         visitor: { code: sessionIdRef.current },
+        // 幂等键：服务端据此对重试去重，避免「AI 失败 + 重发」产生重复气泡
+        clientMessageId: userMsgId,
       };
-
-      // 乐观渲染：先放上访客消息和一个空的 AI 气泡，流式增量往里填
-      const userMsgId = newId();
       const aiMsgId = newId();
+      inflightRef.current = { userId: userMsgId, aiId: aiMsgId };
       const now = new Date().toISOString();
       setInput('');
       setPending([]);
@@ -274,8 +303,14 @@ export default function Widget({ apiBase, title, siteKey }: WidgetProps) {
           );
           if (atBottomRef.current) scrollToBottom();
         });
-      } catch {
-        // 流式不可用（老版本服务等）：回退到一次性接口
+      } catch (err: any) {
+        if (err?.phase === 'stream') {
+          // 流已建立但中断：服务端大概率仍在处理并会落库，最终结果由会话 SSE 推回来。
+          // 只移除未完成的 AI 气泡等待同步，不重发（误重发也会被服务端幂等去重兜底）
+          setMessagesState((m) => m.filter((msg) => msg.id !== aiMsgId));
+          return;
+        }
+        // 请求阶段失败（流式接口不可用等）：回退一次性接口；服务端按 clientMessageId 幂等
         data = await requestJson('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -290,6 +325,7 @@ export default function Widget({ apiBase, title, siteKey }: WidgetProps) {
       ]);
       scrollToBottom();
     } finally {
+      inflightRef.current = null;
       setSending(false);
     }
   }, [input, pending, sending, ensureSession, requestJson, setMessages, scrollToBottom]);
@@ -509,6 +545,9 @@ export default function Widget({ apiBase, title, siteKey }: WidgetProps) {
                         </div>
                       )}
                       <div className="bubble">
+                        {m.from === 'ai' && !m.content && !m.attachments?.length && (
+                          <span className="typing-dots"><i></i><i></i><i></i></span>
+                        )}
                         {m.content && (
                           <div className="txt">
                             {linkParts(m.content).map((part, i) =>
@@ -543,16 +582,6 @@ export default function Widget({ apiBase, title, siteKey }: WidgetProps) {
                     </div>
                   </div>
                 ))}
-                {sending && !(messages.at(-1)?.from === 'ai' && messages.at(-1)?.content) && (
-                  <div className="row ai">
-                    <div className="avatar ai">AI</div>
-                    <div className="col">
-                      <div className="bubble">
-                        <span className="typing-dots"><i></i><i></i><i></i></span>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
               {!atBottom && (
                 <button className="to-bottom" onClick={scrollToBottom} aria-label="回到底部">↓</button>
@@ -576,7 +605,7 @@ export default function Widget({ apiBase, title, siteKey }: WidgetProps) {
               </div>
             )}
 
-            {(showQuick || messages.length === 0) && !sending && (
+            {showQuick && !sending && (
               <div className="quick-pop" role="menu" aria-label="快捷提问">
                 {QUICK_MESSAGES.map((text) => (
                   <button key={text} role="menuitem" onClick={() => send(text)}>
