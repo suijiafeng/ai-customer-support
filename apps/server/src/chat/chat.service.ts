@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { LIMITS } from '@assistflow/shared';
 import type { ChatResponse, Workflow } from '@assistflow/shared';
-import { AiService } from '../ai/ai.service.js';
+import { AiService, type ReplyDeltaHandler } from '../ai/ai.service.js';
 import { KnowledgeService } from '../knowledge/knowledge.service.js';
 import { detectIntent, detectSentiment, shouldHandoff } from '../rules/rules.js';
 import {
@@ -24,7 +24,7 @@ export class ChatService {
     private readonly sse: SseService
   ) {}
 
-  async handleChat(body: any): Promise<ChatResponse | { error: string }> {
+  async handleChat(body: any, onDelta?: ReplyDeltaHandler): Promise<ChatResponse | { error: string }> {
     const message = String(body?.message || '').trim();
     const sessionId = String(body?.sessionId || 'default');
     const profile = body?.profile ? normalizeProfile(body.profile) : null;
@@ -72,6 +72,44 @@ export class ChatService {
       };
     }
 
+    // 口水话/测试消息（在吗、测试、111、谢谢…）直接内置回复，不走 FAQ/AI、不建跟进事项
+    const smallTalk = message && attachments.length === 0 ? this.knowledge.matchSmallTalk(message) : null;
+    if (smallTalk) {
+      const workflow: Workflow = {
+        ai: {
+          provider: this.ai.provider,
+          model: this.ai.getActiveModel(),
+          used: false,
+          fallback: false,
+          error: null,
+        },
+        intent: `small_talk:${smallTalk.intent}`,
+        sentiment: detectSentiment(message),
+        needHuman: false,
+        reason: '寒暄或测试消息，内置回复',
+        inquiry: null,
+        ticket: null,
+        sources: [],
+      };
+      const nextHistory = this.sessions.appendMessages(
+        storedHistory,
+        this.sessions.createMessage({ role: 'user', actor: 'customer', content: message, attachments }),
+        this.sessions.createMessage({ role: 'assistant', actor: 'ai', content: smallTalk.reply })
+      );
+
+      this.sessions.setConversation(sessionId, nextHistory);
+      this.sessions.upsertSession({ sessionId, message, workflow, profile, visitor });
+      this.notify(sessionId);
+
+      return {
+        sessionId,
+        reply: smallTalk.reply,
+        session: this.sessions.get(sessionId)!,
+        messages: nextHistory,
+        ...workflow,
+      };
+    }
+
     const matchedFaqs = this.knowledge.searchFaqs(message);
     const inquiry = this.knowledge.findInquiry(message);
     const intent = detectIntent(message, matchedFaqs);
@@ -87,15 +125,10 @@ export class ChatService {
     const ticket = handoff.needHuman
       ? this.tickets.create({ sessionId, message, intent, reason: handoff.reason, inquiry })
       : null;
-    const replyResult = await this.ai.buildReply({
-      message,
-      history,
-      matchedFaqs,
-      intent,
-      handoff,
-      inquiry,
-      ticket,
-    });
+    const replyResult = await this.ai.buildReply(
+      { message, history, matchedFaqs, intent, handoff, inquiry, ticket },
+      onDelta
+    );
     const reply = replyResult.text;
     const nextHistory = this.sessions.appendMessages(
       storedHistory,
