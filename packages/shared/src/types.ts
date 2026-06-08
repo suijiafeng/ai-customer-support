@@ -70,6 +70,16 @@ export interface Faq {
   answer: string;
   keywords: string[];
   intent?: string;
+  /** 面向对象（可选）：如 new_lead / existing_client / hiring */
+  audience?: string;
+  /** 访客旅程阶段（可选）：如 discovery / scoping / quoting / delivery / support */
+  stage?: string;
+  /** 需要人工确认的边界提示（可选） */
+  confidenceNote?: string;
+  /** 扩展标签（可选）：用于运营筛选与分组 */
+  tags?: string[];
+  /** 最近复审日期（可选，YYYY-MM-DD） */
+  lastReviewedAt?: string;
 }
 
 export interface FaqSource {
@@ -100,6 +110,12 @@ export interface Workflow {
 export interface VisitorInfo {
   code: string;
   createdAt: string | null;
+  /** 服务端按真实客户端 IP 采集（仅客服可见，公开接口会剥离） */
+  ip?: string | null;
+  /** 由 User-Agent 解析的「系统 · 浏览器」标签（仅客服可见） */
+  device?: string | null;
+  /** 预留：由 IP 推断的地理位置；未启用 GeoIP 时为 null（仅客服可见） */
+  location?: string | null;
 }
 
 export interface Profile {
