@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Message } from '@assistflow/shared';
-import { createMessageArchive } from '@assistflow/shared';
+import { createMessageArchive, fmtTime, linkParts } from '@assistflow/shared';
 import { loadVisitorId, ensureVisitorId, isVisitorIdValid } from './visitorId.js';
 import { Markdown } from './markdown.js';
 
@@ -27,30 +27,6 @@ interface WidgetProps {
   siteKey: string;
 }
 
-// 时间戳格式化为 HH:MM
-function fmtTime(iso?: string): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
-}
-
-// 将纯文本切分为文本/链接片段，安全渲染可点击链接
-const URL_RE = /(https?:\/\/[^\s]+)/g;
-function linkParts(text: string): Array<{ link: boolean; value: string }> {
-  const parts: Array<{ link: boolean; value: string }> = [];
-  let last = 0;
-  let match: RegExpExecArray | null;
-  URL_RE.lastIndex = 0;
-  while ((match = URL_RE.exec(text)) !== null) {
-    if (match.index > last) parts.push({ link: false, value: text.slice(last, match.index) });
-    parts.push({ link: true, value: match[0] });
-    last = match.index + match[0].length;
-  }
-  if (last < text.length) parts.push({ link: false, value: text.slice(last) });
-  return parts;
-}
-
 function normalizeMessages(list: any[] = []): UiMessage[] {
   return list.map((message) => ({
     ...message,
@@ -69,6 +45,9 @@ const QUICK_MESSAGES = [
   '最近有档期吗？',
   '如何联系你？',
 ];
+
+// 流式中断后等待会话 SSE 推回最终结果的兜底时长：超时仍未收到则把消息标为失败可重试
+const STREAM_FALLBACK_MS = 12000;
 
 /**
  * 流式对话：POST /api/chat/stream 返回 SSE。
@@ -315,8 +294,18 @@ export default function Widget({ apiBase, title, siteKey }: WidgetProps) {
       } catch (err: any) {
         if (err?.phase === 'stream') {
           // 流已建立但中断：服务端大概率仍在处理并会落库，最终结果由会话 SSE 推回来。
-          // 只移除未完成的 AI 气泡等待同步，不重发（误重发也会被服务端幂等去重兜底）
+          // 移除未完成的 AI 气泡等待同步，不立刻重发（误重发也会被服务端幂等去重兜底）。
+          // 兜底：超时仍未收到回复（访客消息还停在「发送中」）则标为失败可重试，避免无声永久卡住。
           setMessagesState((m) => m.filter((msg) => msg.id !== aiMsgId));
+          window.setTimeout(() => {
+            setMessagesState((m) =>
+              m.map((msg) =>
+                msg.id === userMsgId && msg.status === 'sending'
+                  ? { ...msg, status: 'failed' as const, retryText: text }
+                  : msg
+              )
+            );
+          }, STREAM_FALLBACK_MS);
           return;
         }
         // 请求阶段失败（流式接口不可用等）：回退一次性接口；服务端按 clientMessageId 幂等
