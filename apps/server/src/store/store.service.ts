@@ -2,22 +2,22 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import type { PersistedData, Store } from './store.js';
 import { createStore } from './store.js';
 
-/**
- * 持久化服务：包装写穿透 store。
- * onModuleInit 时建表并载入快照（供 Sessions/Tickets 服务在各自 init 时 hydrate），
- * 初始化失败（库不可达等）降级为纯内存，保证服务仍能起来。
- */
 @Injectable()
 export class StoreService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(StoreService.name);
   private store: Store = createStore();
   private persisted: PersistedData = { sessions: [], conversations: [], tickets: [], widgetKeys: [] };
 
+  private readyResolve!: () => void;
+  // Nest 并行执行同模块的 onModuleInit，消费方必须 await 此 Promise 才能读到完整快照
+  readonly whenReady: Promise<void> = new Promise((resolve) => {
+    this.readyResolve = resolve;
+  });
+
   get enabled(): boolean {
     return this.store.enabled;
   }
 
-  /** 启动时载入的持久化快照 */
   getPersisted(): PersistedData {
     return this.persisted;
   }
@@ -36,6 +36,8 @@ export class StoreService implements OnModuleInit, OnModuleDestroy {
       this.logger.error(`初始化失败，降级为纯内存模式：${error?.message || error}`);
       this.store = createStore({ connectionString: null });
       this.persisted = { sessions: [], conversations: [], tickets: [], widgetKeys: [] };
+    } finally {
+      this.readyResolve();
     }
   }
 
@@ -53,20 +55,18 @@ export class StoreService implements OnModuleInit, OnModuleDestroy {
   saveWidgetKey = (key: Parameters<Store['saveWidgetKey']>[0]) => this.store.saveWidgetKey(key);
   deleteWidgetKey = (key: string) => this.store.deleteWidgetKey(key);
 
-  // 单条回读（内存淘汰后仍可从库取回）
   loadSession = (id: string) => this.store.getSession(id);
   loadConversation = (id: string) => this.store.getConversation(id);
   loadTicket = (id: string) => this.store.getTicket(id);
 
-  // 每日指标快照
   saveDailyMetric = (point: Parameters<Store['saveDailyMetric']>[0]) =>
     this.store.saveDailyMetric(point);
   loadDailyMetrics = (days: number) => this.store.loadDailyMetrics(days);
 
-  /** 持久化健康：是否出现过写失败 + 详情 */
   get degraded(): boolean {
     return this.store.stats().writeErrors > 0;
   }
+
   stats() {
     return this.store.stats();
   }

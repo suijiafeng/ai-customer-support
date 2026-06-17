@@ -18,8 +18,6 @@ import { ChatService } from './chat.service.js';
 
 const MAX_MESSAGE_LENGTH = 2000;
 
-// ThrottlerGuard 会对全局注册的每个具名限流组逐一校验，而不仅是 @Throttle 里覆盖的那组，
-// 因此这里显式跳过 login 组，避免聊天接口被更严格的登录限流（5/分钟）误伤。
 @SkipThrottle({ login: true })
 @Controller('api/chat')
 export class ChatController {
@@ -35,8 +33,7 @@ export class ChatController {
   @Post()
   async chatHandler(@Body() body: any, @Req() req: Request) {
     this.assertHasContent(body);
-    this.assertValidSiteKey(body);
-
+    this.assertValidSiteKey(body, req);
     try {
       return await this.chat.handleChat(body, undefined, this.clientMeta(req));
     } catch (error: any) {
@@ -48,17 +45,12 @@ export class ChatController {
     }
   }
 
-  /**
-   * 流式对话：SSE over POST。
-   * AI（DeepSeek）回复边生成边推 `delta` 事件；结束推 `done`（完整 ChatResponse，
-   * 与 POST /api/chat 同构）。规则回复/未启用 AI 时没有 delta，直接一个 done。
-   */
   @UseGuards(ThrottlerGuard)
   @Throttle({ chat: { ttl: 60000, limit: 20 } })
   @Post('stream')
   async chatStream(@Body() body: any, @Res() res: Response, @Req() req: Request) {
     this.assertHasContent(body);
-    this.assertValidSiteKey(body);
+    this.assertValidSiteKey(body, req);
 
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -89,13 +81,10 @@ export class ChatController {
     }
   }
 
-  /** 采集请求侧元信息：真实客户端 IP（依赖 trust proxy）与 User-Agent。 */
   private clientMeta(req: Request): ClientMeta {
     const xffRaw = req.headers['x-forwarded-for'];
     const xff = Array.isArray(xffRaw) ? xffRaw[0] : xffRaw;
-    const forwardedIp = String(xff || '')
-      .split(',')[0]
-      .trim();
+    const forwardedIp = String(xff || '').split(',')[0].trim();
     const realIp = String(req.headers['x-real-ip'] || '').trim();
     const ipRaw = forwardedIp || realIp || req.ip || '';
     const ip = ipRaw.startsWith('::ffff:') ? ipRaw.slice(7) : ipRaw;
@@ -105,8 +94,6 @@ export class ChatController {
   private assertHasContent(body: any) {
     const message = String(body?.message || '').trim();
     const attachments = Array.isArray(body?.attachments) ? body.attachments : [];
-
-    // 允许「纯图片」消息：有文字或有图片即可
     if (!message && attachments.length === 0) {
       throw new BadRequestException({ error: 'message or attachments required' });
     }
@@ -115,10 +102,17 @@ export class ChatController {
     }
   }
 
-  /** 校验 widget 接入密钥：不存在/未启用一律拒绝，避免未注册站点接入客服。 */
-  private assertValidSiteKey(body: any) {
-    if (!this.widgetKeys.isValid(body?.siteKey)) {
-      throw new ForbiddenException({ error: 'invalid_site_key' });
+  private assertValidSiteKey(body: any, req: Request) {
+    const source = (req.headers.origin as string) || (req.headers.referer as string) || '';
+    let originHost: string | null = null;
+    try {
+      originHost = source ? new URL(source).hostname.toLowerCase() : null;
+    } catch {
+      originHost = null;
+    }
+    const verdict = this.widgetKeys.verify(body?.siteKey, body?.tenantId, originHost);
+    if (verdict !== 'ok') {
+      throw new ForbiddenException({ error: verdict });
     }
   }
 }
