@@ -29,7 +29,7 @@ export default `
   cursor: pointer; padding: 0; text-decoration: underline; }
 .backdrop { position: fixed; inset: 0; z-index: 2147483001; border: 0; padding: 0; cursor: default;
   background: rgba(15,23,42,.34); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
-  animation: afw-fade .18s ease-out; }
+  animation: afw-fade .18s ease-out; touch-action: none; }
 @keyframes afw-fade { from { opacity: 0; } to { opacity: 1; } }
 /* 面板：与悬浮球分离，固定在视口居中（inset+margin auto 居中，避免与弹出动画 transform 冲突） */
 .panel { position: fixed; inset: 0; margin: auto;
@@ -53,7 +53,7 @@ export default `
   cursor: grab; touch-action: none; user-select: none; }
 .panel.dragging .head { cursor: grabbing; }
 .panel.dragging { box-shadow: 0 24px 60px rgba(15,23,42,.32); }
-.head .title { display: flex; flex-direction: column; gap: 2px; }
+.head .title { display: flex; gap: 15px; }
 .head .sub { font-size: 11px; font-weight: 400; opacity: .85; display: flex; align-items: center; gap: 5px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: #9bdc8a; display: inline-block; }
 .dot.off { background: #f0c36d; }
@@ -61,7 +61,7 @@ export default `
   width: 30px; height: 30px; border-radius: 8px; transition: background .15s; }
 .x:hover { background: rgba(255,255,255,.18); }
 .list-wrap { position: relative; flex: 1; display: flex; min-height: 0; }
-.list { flex: 1; overflow-y: auto; padding: 14px 12px; background: #f1f3f6; scroll-behavior: smooth; }
+.list { flex: 1; overflow-y: auto; padding: 14px 12px; background: #f1f3f6; scroll-behavior: smooth; overscroll-behavior: contain; }
 
 .row { display: flex; flex-direction: row; align-items: flex-start; gap: 8px; margin: 14px 0; }
 .row.customer { flex-direction: row-reverse; }
@@ -157,41 +157,20 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
   border-radius: 6px; line-height: 1; transition: background .1s; text-align: center; }
 .ep-btn:hover { background: #f0f4ff; }
 
-/* 中等屏（窄笔记本/平板）：略收窄，留出边距 */
-@media (max-width: 600px) {
-  .panel { width: min(420px, calc(100vw - 24px)); }
-  .col { max-width: 80%; }
-}
+/* 窄屏（≤600px）：略收窄面板，留出边距 */
+.afw.narrow .panel { width: min(420px, calc(100vw - 24px)); }
+.afw.narrow .col { max-width: 80%; }
 
-/* 移动端：竖屏手机全屏 */
-@media (max-width: 480px) {
-  .afw { right: 0; bottom: 0; }
-  /* safe-area-inset-bottom：刘海屏/Home 条留空，避免 FAB 被遮挡 */
-  .fab { position: fixed; right: 18px; bottom: calc(44px + env(safe-area-inset-bottom, 0px)); }
-  .panel {
-    position: fixed; inset: 0; width: 100vw; height: 100dvh; border-radius: 0; bottom: 0;
-    /* 底部内容区让出 Home 条 */
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  .col { max-width: 82%; }
-  .emoji-pop { bottom: 96px; }
-  /* 手机上 Shift+Enter 无意义，隐藏提示 */
-  .key-hint { display: none; }
-  /* 触控优化：加大工具栏按钮可点击区域 */
-  .tool { width: 36px; height: 36px; }
-  /* 快捷提问弹层在移动端撑满面板宽度 */
-  .quick-pop { left: 0; right: 0; max-width: 100%; border-radius: 10px 10px 0 0; bottom: 100px; }
+/* 移动端（≤480px 或矮屏）：全屏面板 */
+.afw.mobile { right: 0; bottom: 0; }
+.afw.mobile .fab { position: fixed; right: 18px; bottom: calc(44px + env(safe-area-inset-bottom, 0px)); }
+.afw.mobile .panel {
+  position: fixed; inset: 0; width: 100vw; height: 100dvh; border-radius: 0; bottom: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-
-/* 矮屏（横屏手机等）：高度不足时也走全屏，避免被裁切 */
-@media (max-height: 560px) {
-  .afw { right: 0; bottom: 0; }
-  .fab { position: fixed; right: 18px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
-  .panel {
-    position: fixed; inset: 0; width: 100vw; height: 100dvh; border-radius: 0; bottom: 0;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  .emoji-pop { bottom: 96px; height: 60vh; }
-  .key-hint { display: none; }
-}
+.afw.mobile .col { max-width: 82%; }
+.afw.mobile .emoji-pop { bottom: 96px; }
+.afw.mobile .key-hint { display: none; }
+.afw.mobile .tool { width: 36px; height: 36px; }
+.afw.mobile .quick-pop { left: 0; right: 0; max-width: 100%; border-radius: 10px 10px 0 0; bottom: 100px; }
 `;
