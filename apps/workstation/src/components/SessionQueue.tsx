@@ -8,25 +8,23 @@ interface SessionQueueProps {
   onSelect: (id: string) => void;
   open?: boolean;
   agent?: AgentIdentity;
+  ready?: boolean;
 }
 
-// 下方“会话列表”分区的筛选（公共池已独立成上方分区，不在此列）
 type Filter = 'all' | 'mine' | 'closed';
 
 const FILTERS: Array<{ key: Filter; label: string }> = [
   { key: 'all', label: '全部' },
-  { key: 'mine', label: '我的接待' },
+  { key: 'mine', label: '我的' },
   { key: 'closed', label: '已关闭' },
 ];
 
-export default function SessionQueue({ sessions, activeId, onSelect, open = false, agent }: SessionQueueProps) {
+export default function SessionQueue({ sessions, activeId, onSelect, open = false, agent, ready = false }: SessionQueueProps) {
   const [filter, setFilter] = useState<Filter>('all');
   const [keyword, setKeyword] = useState('');
-  // 手风琴展开状态，默认都展开
   const [poolOpen, setPoolOpen] = useState(true);
   const [listOpen, setListOpen] = useState(true);
 
-  // 公共池：尚未被认领且未关闭的会话（可抢单）；其余进入下方会话列表
   const { pool, others } = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
     const match = (s: SessionSummary) =>
@@ -36,7 +34,6 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
       (s.inquiryId || '').toLowerCase().includes(kw);
 
     const isPool = (s: SessionSummary) => !s.assignedAgentId && s.status !== 'closed';
-
     const pool = sessions.filter((s) => isPool(s) && match(s));
     const others = sessions.filter((s) => {
       if (isPool(s)) return false;
@@ -63,7 +60,7 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
       >
         <div className="sess-top">
           <span className="name">
-            {s.priority === 'high' && <span className="prio-dot" title="高优先级" aria-label="高优先级" />}
+            {s.priority === 'high' && <span className="prio-dot" aria-label="高优先级" />}
             {s.displayName}
           </span>
         </div>
@@ -74,75 +71,72 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
 
   return (
     <aside className={`queue${open ? ' open' : ''}`} aria-label="会话列表">
-      <div className="queue-head">
-        会话列表 <span className="count-badge" aria-label={`共 ${sessions.length} 个会话`}>共 {sessions.length} 个</span>
-      </div>
-      <div className="queue-tools">
+      <div className="queue-top">
         <input
           className="queue-search"
-          placeholder="搜索访客 / 消息 / 编号"
+          placeholder="搜索访客 / 消息…"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
         />
       </div>
 
       <div className="queue-scroll">
-        {/* 接待大厅：手风琴分区，待抢单 */}
+        {/* 接待大厅 */}
         <div className="queue-section queue-pool" role="group" aria-label="接待大厅">
-          <button
-            className="section-head"
+          <div
+            className="q-section-head"
+            role="button"
+            tabIndex={0}
             aria-expanded={poolOpen}
             onClick={() => setPoolOpen((v) => !v)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPoolOpen((v) => !v); } }}
           >
-            <span className="section-title">
-              <span className={`section-caret${poolOpen ? ' open' : ''}`} aria-hidden="true">▸</span>
-              接待大厅
-            </span>
-            <span className="section-count pool">{poolTotal} 待抢单</span>
-          </button>
+            <span className={`q-caret${poolOpen ? ' open' : ''}`}>▸</span>
+            <span className="q-section-title">接待大厅</span>
+            {poolTotal > 0 && <span className="q-badge">{poolTotal} 待接待</span>}
+          </div>
           {poolOpen && (
-            <div role="list">
+            <div role="list" className="q-list">
               {pool.map(renderItem)}
               {!pool.length && (
-                <div className="section-empty">{poolTotal ? '没有匹配的客户' : '接待大厅暂无待接待客户'}</div>
+                <div className="section-empty">{ready ? '暂无待接待客户' : '连接中…'}</div>
               )}
             </div>
           )}
         </div>
 
-        {/* 会话列表：手风琴分区，已被认领 / 已关闭 */}
-        <div className="queue-section" role="group" aria-label="会话列表">
-          <button
-            className="section-head"
+        {/* 我的会话 */}
+        <div className="queue-section" role="group" aria-label="我的会话">
+          <div
+            className="q-section-head"
+            role="button"
+            tabIndex={0}
             aria-expanded={listOpen}
             onClick={() => setListOpen((v) => !v)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setListOpen((v) => !v); } }}
           >
-            <span className="section-title">
-              <span className={`section-caret${listOpen ? ' open' : ''}`} aria-hidden="true">▸</span>
-              会话列表
-            </span>
-            <span className="section-count">{others.length}</span>
-          </button>
+            <span className={`q-caret${listOpen ? ' open' : ''}`}>▸</span>
+            <span className="q-section-title">我的会话</span>
+            <span className="q-count">{others.length}</span>
+            <div className="q-filters" role="tablist" onClick={(e) => e.stopPropagation()}>
+              {FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  role="tab"
+                  aria-selected={filter === f.key}
+                  className={filter === f.key ? 'active' : ''}
+                  onClick={() => setFilter(f.key)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
           {listOpen && (
-            <>
-              <div className="queue-filters" role="tablist">
-                {FILTERS.map((f) => (
-                  <button
-                    key={f.key}
-                    role="tab"
-                    aria-selected={filter === f.key}
-                    className={filter === f.key ? 'active' : ''}
-                    onClick={() => setFilter(f.key)}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-              <div role="list">
-                {others.map(renderItem)}
-                {!others.length && <div className="section-empty">没有匹配的会话</div>}
-              </div>
-            </>
+            <div role="list" className="q-list">
+              {others.map(renderItem)}
+              {!others.length && <div className="section-empty">暂无会话</div>}
+            </div>
           )}
         </div>
       </div>
