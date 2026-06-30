@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import path from 'node:path';
+import fs from 'node:fs';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import express from 'express';
@@ -42,14 +43,21 @@ async function bootstrap() {
     })
   );
 
+  const demoIndex = path.join(appConfig.staticDirs.demo, 'index.html');
+  const hasDemoIndex = fs.existsSync(demoIndex);
+  if (hasDemoIndex) {
+    // demo 静态资源（/assets/*.js, /assets/*.css, /favicon.svg 等）直接从 demo dist 目录伺服
+    app.use(express.static(appConfig.staticDirs.demo));
+  }
   app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     const reserved = ['/api', '/widget', '/workstation'];
     if (
+      hasDemoIndex &&
       req.method === 'GET' &&
       !reserved.some((prefix) => req.path.startsWith(prefix)) &&
       req.accepts('html')
     ) {
-      return res.sendFile(path.join(appConfig.staticDirs.demo, 'index.html'));
+      return res.sendFile(demoIndex);
     }
     next();
   });
