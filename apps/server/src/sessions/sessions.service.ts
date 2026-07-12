@@ -41,10 +41,6 @@ export class SessionsService implements OnModuleInit {
     return [...this.sessions.values()];
   }
 
-  get sessionCount(): number {
-    return this.sessions.size;
-  }
-
   get messageCount(): number {
     return [...this.conversations.values()].reduce((total, messages) => total + messages.length, 0);
   }
@@ -226,10 +222,14 @@ export class SessionsService implements OnModuleInit {
     const all = [...this.sessions.values()];
     const scoped = agent ? all.filter((session) => this.canView(session, agent)) : all;
     return {
-      sessions: scoped.sort(sortSessions).map((session) => ({
-        ...session,
-        messageCount: this.conversations.get(session.sessionId)?.length || 0,
-      })),
+      sessions: scoped.sort(sortSessions).map((session) => {
+        const msgs = this.conversations.get(session.sessionId);
+        return {
+          ...session,
+          messageCount: msgs?.length || 0,
+          lastMessageRole: msgs?.length ? msgs[msgs.length - 1].role : null,
+        };
+      }),
     };
   }
 
