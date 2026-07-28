@@ -25,7 +25,10 @@ export interface ReplyResult {
 /** 流式增量回调：每收到一段模型输出调用一次 */
 export type ReplyDeltaHandler = (delta: string) => void;
 
-/** AI 超时（毫秒）：超时后降级为本地规则回复 */
+/**
+ * AI 超时（毫秒）。非流式：整次请求上限；流式：两段输出之间的最大空闲，每收到一段就重置——
+ * 固定 30s 总上限会把正在正常吐字的长回复腰斩，再用兜底话术覆盖访客已经看到的内容。
+ */
 const AI_TIMEOUT_MS = 30_000;
 
 /** AI 适配层：任意 OpenAI 兼容服务（AI_BASE_URL/AI_MODEL/AI_API_KEY）+ 本地规则降级。 */
@@ -160,7 +163,13 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     ].join('\n\n');
 
     const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), AI_TIMEOUT_MS);
+    let timer = setTimeout(() => abort.abort(), AI_TIMEOUT_MS);
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => abort.abort(), AI_TIMEOUT_MS);
+    };
+    // 流式已经推给访客的文本：中途失败时保留它，而不是用兜底话术把已显示的内容替换掉
+    let streamed = '';
 
     try {
       let text: string | undefined;
@@ -178,15 +187,15 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
           },
           { signal: abort.signal }
         );
-        let acc = '';
         for await (const chunk of stream) {
           const delta = chunk.choices[0]?.delta?.content || '';
           if (delta) {
-            acc += delta;
+            streamed += delta;
+            resetTimer();
             onDelta(delta);
           }
         }
-        text = acc.trim();
+        text = streamed.trim();
       } else {
         const completion = await activeClient.chat.completions.create(
           {
@@ -214,6 +223,15 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     } catch (error: any) {
       const isTimeout = error?.name === 'AbortError';
       const formattedError = isTimeout ? `timeout after ${AI_TIMEOUT_MS}ms` : formatAiError(error);
+      const partial = streamed.trim();
+      if (partial) {
+        // 访客已经看到前半段：按「AI 已回答但未完整」处理，客服侧 workflow.ai.error 可见原因
+        this.logger.warn(`AI 流式中断，保留已输出内容：${formattedError}`);
+        return {
+          text: partial,
+          ai: { provider: this.provider, model: this.getActiveModel(), used: true, fallback: false, error: formattedError },
+        };
+      }
       this.logger.warn(`AI 请求失败，降级为本地规则：${formattedError}`);
       return {
         ...fallbackResult,
