@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createMessageArchive } from '@assistflow/shared';
-import { loadVisitorId, ensureVisitorId, isVisitorIdValid } from '../visitorId.js';
+import { loadVisitorId, ensureVisitorId, isVisitorIdValid, resetVisitorId } from '../visitorId.js';
 import { newId, normalizeMessages, streamChat, type PendingImage, type UiMessage } from '../chatApi.js';
 import { saveVisitorToken, visitorAuthHeaders, withVisitorQuery } from '../visitorToken.js';
 
@@ -10,6 +10,9 @@ const STREAM_FALLBACK_MS = 12000;
 // 访客侧对话归档：服务端窗口外的旧消息留在本地，重启/淘汰不丢界面历史
 // 租户身份校验失败的错误码：密钥无效/停用、租户ID不匹配、来源域名不在允许范围
 const IDENTITY_ERRORS = ['invalid_site_key', 'invalid_tenant', 'domain_not_allowed'];
+// 服务端要求出示访客令牌才能续写该会话，而本地没有（旧版 widget 留下的会话 / 令牌过期或被清）：
+// 旧历史已经读不回来了，换一个新会话身份继续聊，比卡死在「发送失败」强
+const TOKEN_REQUIRED = 'visitor_token_required';
 
 const messageArchive = createMessageArchive(
   typeof window !== 'undefined' ? window.localStorage : undefined,
@@ -157,7 +160,7 @@ export function useChatSession({
   }, [siteKey, activate]);
 
   const send = useCallback(
-    async (textOverride?: string, options?: { preferAi?: boolean }) => {
+    async (textOverride?: string, options?: { preferAi?: boolean; rotated?: boolean }) => {
       const text = (textOverride ?? input).trim();
       if ((!text && pending.length === 0) || sendingRef.current) return;
       // 前端先拦截：发送过快时保留输入框内容、不发请求，只给倒计时；后端为最后一道防线
@@ -166,6 +169,8 @@ export function useChatSession({
       const attachments = pending;
       sendingRef.current = true;
       setSending(true);
+      // 服务端拒绝续写（缺访客令牌）：换新会话身份重发一次；只换一次，避免无限循环
+      let rotateAndRetry = false;
       try {
         await ensureSession();
         // 乐观渲染：先放上访客消息和一个空的 AI 气泡，流式增量往里填
@@ -196,6 +201,8 @@ export function useChatSession({
         ]);
         scrollToBottom();
 
+        // 续写已有会话必须带访客令牌（服务端据此拒绝拿着别人 sessionId 插话的请求）
+        const chatHeaders = visitorAuthHeaders(sessionIdRef.current);
         let data: any;
         try {
           data = await streamChat(apiBase, payload, (delta) => {
@@ -203,8 +210,13 @@ export function useChatSession({
               m.map((msg) => (msg.id === aiMsgId ? { ...msg, content: (msg.content || '') + delta } : msg))
             );
             if (atBottomRef.current) scrollToBottom();
-          });
+          }, chatHeaders);
         } catch (err: any) {
+          if (err?.code === TOKEN_REQUIRED && !options?.rotated) {
+            setMessagesState((m) => m.filter((msg) => msg.id !== userMsgId && msg.id !== aiMsgId));
+            rotateAndRetry = true;
+            return;
+          }
           if (IDENTITY_ERRORS.includes(err?.code)) {
             // 租户身份校验失败（密钥/租户ID/域名）：不是普通发送失败，重试没有意义，
             // 撤回乐观气泡并转入"客服不可用"状态
@@ -243,7 +255,7 @@ export function useChatSession({
           // 请求阶段失败（流式接口不可用等）：回退一次性接口；服务端按 clientMessageId 幂等
           data = await requestJson('/api/chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...chatHeaders },
             body: JSON.stringify(payload),
           });
         }
@@ -254,6 +266,11 @@ export function useChatSession({
         if (data?.session) setHumanAssigned(data.session.status === 'assigned');
       } catch (err: any) {
         const inflight = inflightRef.current;
+        if (err?.code === TOKEN_REQUIRED && !options?.rotated) {
+          setMessagesState((m) => m.filter((msg) => msg.id !== inflight?.userId && msg.id !== inflight?.aiId));
+          rotateAndRetry = true;
+          return;
+        }
         if (IDENTITY_ERRORS.includes(err?.code)) {
           // 兜底：一次性接口回退这条路上才发现租户身份无效，同样撤回乐观气泡
           setMessagesState((m) => m.filter((msg) => msg.id !== inflight?.userId && msg.id !== inflight?.aiId));
@@ -278,6 +295,14 @@ export function useChatSession({
         inflightRef.current = null;
         sendingRef.current = false;
         setSending(false);
+        // 放在 finally 里：上面各分支用 return 退出，finally 之后的代码不会执行；
+        // 发送态已复位，这里再以新身份重发一次
+        if (rotateAndRetry) {
+          resetVisitorId(siteKey);
+          sessionIdRef.current = '';
+          setMessagesState([]);
+          void send(text, { ...options, rotated: true });
+        }
       }
     },
     [

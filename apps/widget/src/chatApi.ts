@@ -31,13 +31,14 @@ export function normalizeMessages(list: any[] = []): UiMessage[] {
 export async function streamChat(
   apiBase: string,
   payload: unknown,
-  onDelta: (text: string) => void
+  onDelta: (text: string) => void,
+  headers: Record<string, string> = {}
 ): Promise<any> {
   let response: Response;
   try {
     response = await fetch(`${apiBase}/api/chat/stream`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(payload),
     });
   } catch (err: any) {

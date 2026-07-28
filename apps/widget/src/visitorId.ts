@@ -86,3 +86,10 @@ export function ensureVisitorId(siteKey: string): string {
 export function isVisitorIdValid(siteKey: string, id: string): boolean {
   return Boolean(id) && loadVisitorId(siteKey) === id;
 }
+
+// 丢弃本地标识（服务端拒绝续写该会话时调用）：下次 ensureVisitorId 会生成全新身份
+export function resetVisitorId(siteKey: string): void {
+  try {
+    window.localStorage.removeItem(STORE_KEY(siteKey));
+  } catch {}
+}

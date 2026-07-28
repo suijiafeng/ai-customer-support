@@ -14,6 +14,8 @@ let ticketId = null;
 // 结束时删除，避免在持久化库里越积越多
 const smokeSiteKey = `${runId}-site`;
 let smokeTenantId = null;
+// 访客令牌：/api/chat 每次响应下发，续写同一会话时必须在 x-visitor-token 头里带回
+const visitorTokens = new Map();
 
 const cases = [
   {
@@ -187,7 +189,18 @@ const cases = [
       && data.reply === ''
       && data.ticket?.id === ticketId
       && data.ticket?.status === 'processing'
-      && data.messages?.at(-1)?.actor === 'customer',
+      // 接管期间访客消息后会跟一条「客服已接入」系统提示，取最后一条非系统消息判断
+      && data.messages?.filter((m) => m.actor !== 'system').at(-1)?.actor === 'customer',
+  },
+  {
+    name: 'chat into existing session without visitor token is rejected',
+    run: () => post('/api/chat', {
+      sessionId: ticketSessionId,
+      message: '没带令牌的插话',
+      siteKey: smokeSiteKey,
+      tenantId: smokeTenantId,
+    }, { visitorToken: false }),
+    assert: (data) => data.error === 'visitor_token_required',
   },
   {
     name: 'resolve session',
@@ -346,14 +359,22 @@ async function get(path, options) {
   return unwrap(await response.json());
 }
 
-async function post(path, body, options) {
+async function post(path, body, options = {}) {
+  const isChat = path === '/api/chat';
+  const token = isChat && options.visitorToken !== false ? visitorTokens.get(body?.sessionId) : null;
   const response = await fetch(`${baseUrl}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders(options) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(options),
+      ...(token ? { 'x-visitor-token': token } : {}),
+    },
     body: JSON.stringify(body),
   });
 
-  return unwrap(await response.json());
+  const data = unwrap(await response.json());
+  if (isChat && data?.visitorToken && data?.sessionId) visitorTokens.set(data.sessionId, data.visitorToken);
+  return data;
 }
 
 async function patch(path, body, options) {

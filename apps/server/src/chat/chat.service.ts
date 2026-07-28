@@ -48,6 +48,12 @@ export class ChatService {
     return null;
   }
 
+  /** 该会话是否已有对话记录（内存没有时回源到库，内存淘汰不等于会话不存在） */
+  async sessionHasHistory(sessionId: string): Promise<boolean> {
+    const { messages } = await this.sessions.loadDetail(sessionId);
+    return messages.length > 0;
+  }
+
   async handleChat(
     body: any,
     onDelta?: ReplyDeltaHandler,

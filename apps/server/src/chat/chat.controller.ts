@@ -12,7 +12,8 @@ import {
 } from '@nestjs/common';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
-import type { ClientMeta } from '../common/normalize.js';
+import { normalizeAttachments, type ClientMeta } from '../common/normalize.js';
+import { appConfig } from '../config.js';
 import { AuthService } from '../auth/auth.service.js';
 import { WidgetKeysService } from '../widget-keys/widget-keys.service.js';
 import { ChatService } from './chat.service.js';
@@ -49,6 +50,7 @@ export class ChatController {
   async chatHandler(@Body() body: any, @Req() req: Request) {
     this.assertHasContent(body);
     this.assertValidSiteKey(body, req);
+    await this.assertMayWriteSession(body, req);
     try {
       return this.withVisitorToken(await this.chat.handleChat(body, undefined, this.clientMeta(req)));
     } catch (error: any) {
@@ -66,6 +68,7 @@ export class ChatController {
   async chatStream(@Body() body: any, @Res() res: Response, @Req() req: Request) {
     this.assertHasContent(body);
     this.assertValidSiteKey(body, req);
+    await this.assertMayWriteSession(body, req);
 
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -96,19 +99,43 @@ export class ChatController {
     }
   }
 
+  /**
+   * 访客 IP：只信 Express 按 TRUST_PROXY 解析出来的 req.ip。
+   * 之前无条件读 x-forwarded-for / x-real-ip，任何访客都能伪造工作台里显示的来源 IP；
+   * 未配置 TRUST_PROXY 时这些头来自客户端本身，不可信。
+   */
   private clientMeta(req: Request): ClientMeta {
-    const xffRaw = req.headers['x-forwarded-for'];
-    const xff = Array.isArray(xffRaw) ? xffRaw[0] : xffRaw;
-    const forwardedIp = String(xff || '').split(',')[0].trim();
-    const realIp = String(req.headers['x-real-ip'] || '').trim();
-    const ipRaw = forwardedIp || realIp || req.ip || '';
+    let ipRaw = String(req.ip || '');
+    if (appConfig.trustProxy && !ipRaw) {
+      ipRaw = String(req.headers['x-real-ip'] || '').trim();
+    }
     const ip = ipRaw.startsWith('::ffff:') ? ipRaw.slice(7) : ipRaw;
     return { ip: ip || null, userAgent: req.headers['user-agent'] ?? null };
   }
 
+  /**
+   * 已有对话的会话再写入时必须出示该会话的访客令牌。
+   * sessionId 由浏览器生成且会出现在 URL/日志里，siteKey 又是页面源码里的公开值：
+   * 不校验的话，知道 sessionId 的任何人都能往别人的会话里插话，并借 clientMessageId
+   * 去重分支拿到整段历史。首条消息（会话尚不存在）无需令牌——令牌正是在那次响应里签发的。
+   * ALLOW_ANON_SESSION_READ=true 为存量 widget 灰度开关，与会话读取共用。
+   */
+  private async assertMayWriteSession(body: any, req: Request) {
+    const sessionId = String(body?.sessionId || 'default');
+    if (!(await this.chat.sessionHasHistory(sessionId))) return;
+    const token = req.headers['x-visitor-token'] as string | undefined;
+    if (this.auth.verifyVisitorToken(token, sessionId)) return;
+    if (process.env.ALLOW_ANON_SESSION_READ === 'true') return;
+    throw new ForbiddenException({
+      error: 'visitor_token_required',
+      detail: '向已有会话发送消息需要出示该会话的访客令牌（x-visitor-token 头）',
+    });
+  }
+
   private assertHasContent(body: any) {
     const message = String(body?.message || '').trim();
-    const attachments = Array.isArray(body?.attachments) ? body.attachments : [];
+    // 按服务端真正会保存的附件计数，避免 [{}] 这类空壳附件绕过「必须有内容」的校验
+    const attachments = normalizeAttachments(body?.attachments);
     if (!message && attachments.length === 0) {
       throw new BadRequestException({ error: 'message or attachments required' });
     }

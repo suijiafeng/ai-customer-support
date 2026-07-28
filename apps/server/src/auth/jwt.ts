@@ -36,11 +36,19 @@ export function signSseTicket(
 }
 
 export function verifySseTicket(ticket: string, secret: string): AgentClaims | null {
-  const claims = verifyToken(ticket, secret) as (AgentClaims & { kind?: string }) | null;
-  return claims && claims.kind === 'sse' ? claims : null;
+  return verifyWithKind(ticket, secret, 'sse');
 }
 
+/**
+ * 校验客服登录 token。只接受「没有 kind 字段」的令牌：
+ * SSE 票据（kind:'sse'）与访客令牌（kind:'visitor'）同样由 AUTH_SECRET 签名、载荷同样有 sub/exp，
+ * 不区分 kind 的话访客令牌就能直接当客服 Bearer 用（7 天有效、能看接待大厅、能以客服身份回复）。
+ */
 export function verifyToken(token: string, secret: string): AgentClaims | null {
+  return verifyWithKind(token, secret, undefined);
+}
+
+function verifyWithKind(token: string, secret: string, expectedKind: string | undefined): AgentClaims | null {
   const parts = String(token || '').split('.');
   if (parts.length !== 3) return null;
   const [header, body, sig] = parts;
@@ -53,6 +61,7 @@ export function verifyToken(token: string, secret: string): AgentClaims | null {
     const claims = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
     if (typeof claims.sub !== 'string' || typeof claims.exp !== 'number') return null;
     if (claims.exp <= Math.floor(Date.now() / 1000)) return null;
+    if (claims.kind !== expectedKind) return null; // 令牌种类必须严格匹配，不同用途不可互换
     if (claims.role !== 'admin') claims.role = 'agent'; // 兼容旧 token
     return claims as AgentClaims;
   } catch {

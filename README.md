@@ -87,9 +87,11 @@ apps/demo              演示站（widget 嵌入演示，仅消费产物与公�
 
 - 服务端在**每次对话响应**里下发 `visitorToken`（绑定该 sessionId，TTL 7 天，每次对话顺带续期）
 - 访客侧读取时出示：REST 走 `x-visitor-token` 请求头，SSE 走 `?vt=` 查询串（`EventSource` 无法自定义请求头，与客服的 `?ticket=` 同理）
-- 令牌里带 `kind: 'visitor'` 并强制校验——**客服 token 与 SSE 票据不能冒充访客令牌，反之亦然**
+- 令牌里带 `kind: 'visitor'` 并强制校验——**客服 token 与 SSE 票据不能冒充访客令牌，反之亦然**（客服 token 校验只接受没有 `kind` 的令牌）
+- **续写已有会话同样要带令牌**：`POST /api/chat` 与 `/api/chat/stream` 对已有对话的 sessionId 校验 `x-visitor-token`，否则 403 `visitor_token_required`。首条消息（会话尚不存在）无需令牌，令牌正是在那次响应里签发的。widget 收到该错误会换一个新的访客身份重发（旧版 widget 留下的无令牌会话不会卡死）
 - 客服携带自己的 token 访问则走原有的归属判定，不受影响
-- 存量灰度：`ALLOW_ANON_SESSION_READ=true` 可临时放行不带令牌的请求，线上 widget 全部升级后应关闭
+- 存量灰度：`ALLOW_ANON_SESSION_READ=true` 可临时放行不带令牌的读取与续写请求，线上 widget 全部升级后应关闭
+- 工作台里显示的访客 IP 只取 Express 按 `TRUST_PROXY` 解析出的 `req.ip`；未配置 `TRUST_PROXY` 时不再读 `x-forwarded-for`（否则访客可随意伪造来源 IP）
 
 > 不用 Cookie 是因为 widget 嵌在第三方页面里，跨站 Cookie 需要 `SameSite=None` 且正被各浏览器默认拦截。代价是同源 XSS 能读到 localStorage 里的令牌——但该令牌只能读这一个会话，而能执行 XSS 的脚本本来就在同一页面上下文里。
 
@@ -114,7 +116,8 @@ apps/demo              演示站（widget 嵌入演示，仅消费产物与公�
 
 ```bash
 npm install
-# 共享兜底配置已在 .env（可提交）；本机私有配置/密钥写到 .env.local（不提交）
+# 所有配置项都有代码内置的安全默认值，不配任何文件也能启动
+# 本机私有配置/密钥：复制 .env.example 为 .env.local 填写（.env.local 与 .env 均已 gitignore，不进仓库）
 # 加载优先级：真实环境变量 > .env.local > .env
 ```
 
@@ -216,7 +219,7 @@ docker run -d --name assistflow -p 3001:3001 \
 | `custom` | 自定义 | 需自行填写 `AI_BASE_URL` | 需自行填写 `AI_MODEL` |
 
 
-> 配置文件：`.env` 为可提交的安全兜底，私有配置与密钥写入 `.env.local`（已 gitignore）。加载优先级：真实环境变量 > `.env.local` > `.env`。SQLite 默认启用，需 Node 以 `--experimental-sqlite` 启动（`npm run start` 与 Docker 镜像已自动带上）。
+> 配置文件：安全兜底值内置在 `apps/server/src/config.ts`，仓库里只提交 `.env.example` 作为说明模板；私有配置与密钥写入 `.env.local`（`.env.local`、`.env` 均已 gitignore）。加载优先级：真实环境变量 > `.env.local` > `.env`。SQLite 默认启用，需 Node 以 `--experimental-sqlite` 启动（`npm run start` 与 Docker 镜像已自动带上）。
 
 设置 `AI_ENABLED=true` 且配置对应 API Key 后，FAQ 会作为模型回答上下文。模型失败时仍会自动降级到本地 FAQ。
 

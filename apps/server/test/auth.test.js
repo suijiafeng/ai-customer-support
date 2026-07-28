@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { signToken, verifyToken, hashPassword, verifyPassword } from '../dist/auth/jwt.js';
+import { signToken, verifyToken, hashPassword, verifyPassword, signSseTicket, verifySseTicket } from '../dist/auth/jwt.js';
+import { signVisitorToken } from '../dist/auth/visitor-token.js';
 
 const SECRET = 'test-secret';
 
@@ -28,4 +29,19 @@ test('verifyPassword 校验 scrypt 哈希', () => {
   const hash = hashPassword('123456', 'somesalt');
   assert.equal(verifyPassword('123456', 'somesalt', hash), true);
   assert.equal(verifyPassword('wrong', 'somesalt', hash), false);
+});
+
+test('访客令牌与 SSE 票据不能当客服登录 token 用（kind 隔离）', () => {
+  // 三种令牌同一密钥签名、载荷都有 sub/exp；verifyToken 必须只认没有 kind 的客服 token
+  const visitor = signVisitorToken('v-abc123', SECRET);
+  assert.equal(verifyToken(visitor, SECRET), null);
+
+  const ticket = signSseTicket({ sub: '9527', name: '客服9527', role: 'admin' }, SECRET);
+  assert.equal(verifyToken(ticket, SECRET), null);
+  assert.equal(verifySseTicket(ticket, SECRET)?.sub, '9527');
+
+  // 反向：客服 token 与访客令牌也不能当 SSE 票据
+  const agent = signToken({ sub: '9527', name: '客服9527', role: 'agent' }, SECRET);
+  assert.equal(verifySseTicket(agent, SECRET), null);
+  assert.equal(verifySseTicket(visitor, SECRET), null);
 });
