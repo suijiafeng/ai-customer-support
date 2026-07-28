@@ -61,6 +61,9 @@ export class ChatService {
   ): Promise<ChatResponse | { error: string }> {
     const message = String(body?.message || '').trim();
     const sessionId = String(body?.sessionId || 'default');
+    // 先把会话从库里回灌到内存：被 LRU 淘汰的会话否则会被当成新会话重建，
+    // 丢掉接管状态、createdAt 与历史，接管中的访客消息还会被 AI 抢答
+    await this.sessions.loadDetail(sessionId);
     const profile = body?.profile ? normalizeProfile(body.profile) : null;
     const baseVisitor = normalizeVisitor(body?.visitor) ?? inferVisitorFromSessionId(sessionId);
     const visitor: VisitorInfo | null = baseVisitor

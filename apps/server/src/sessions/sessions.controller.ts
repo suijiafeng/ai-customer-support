@@ -120,9 +120,7 @@ export class SessionsController {
     const resolution = String(body?.resolution || '人工客服已标记解决').trim().slice(0, 120);
     if (!session) throw new NotFoundException({ error: 'session not found' });
     const agent = req.agent as AuthenticatedAgent;
-    if (agent.role !== 'admin' && session.assignedAgentId !== agent.id) {
-      throw new ForbiddenException({ error: 'session is handled by another agent' });
-    }
+    this.assertOwnerOrUnassigned(session, agent);
     if (session.status === 'closed') {
       return {
         session,
@@ -222,9 +220,7 @@ export class SessionsController {
     const current = this.sessions.get(sessionId);
     if (!current) throw new NotFoundException({ error: 'session not found' });
     const agent = req.agent as AuthenticatedAgent;
-    if (agent.role !== 'admin' && current.assignedAgentId !== agent.id) {
-      throw new ForbiddenException({ error: 'session is handled by another agent' });
-    }
+    this.assertOwnerOrUnassigned(current, agent);
     const updatedSession: Session = {
       ...current,
       profile,
@@ -239,6 +235,18 @@ export class SessionsController {
     this.sessions.setSession(updatedSession);
     this.workflow.notify(sessionId);
     return { session: updatedSession };
+  }
+
+  /**
+   * 会话级操作（标记解决 / 改资料）的归属判定，与工单侧 assertCanOperate 保持一致：
+   * 管理员全部可操作；普通客服可操作「自己的 + 尚未认领」的会话。
+   * 之前要求必须已归属自己，导致接待大厅里等人工的会话普通客服既不能先补资料也不能直接关闭。
+   */
+  private assertOwnerOrUnassigned(session: Session, agent: AuthenticatedAgent) {
+    if (agent.role === 'admin') return;
+    if (session.assignedAgentId && session.assignedAgentId !== agent.id) {
+      throw new ForbiddenException({ error: 'session is handled by another agent' });
+    }
   }
 
   private redactVisitor<T extends { session: Session | null }>(payload: T): T {

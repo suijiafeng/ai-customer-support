@@ -94,3 +94,22 @@ test('队列里的 lastMessageRole 跳过系统提示，仍标记「访客在等
   const [summary] = svc.getSessionsPayload().sessions;
   assert.equal(summary.lastMessageRole, 'user');
 });
+
+test('内存淘汰按最近使用而非最早创建：活跃的老会话不会被新会话挤出去', async () => {
+  const { LIMITS } = await import('@assistflow/shared');
+  const svc = new SessionsService(fakeStore());
+  const make = (id) => ({
+    sessionId: id, displayName: id, profile: null, visitor: null, status: 'bot', priority: 'normal',
+    lastMessage: '', lastIntent: 'general', sentiment: 'neutral', needHuman: false, reason: '',
+    inquiryId: null, ticketId: null, assignedAgentId: null, assignedAgentName: null, workflow: null,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  });
+  svc.setSession(make('old-but-active'));
+  for (let i = 0; i < LIMITS.MAX_SESSIONS - 1; i += 1) svc.setSession(make(`s-${i}`));
+  // 老会话刚被更新过（仍活跃），再进一个新会话应淘汰最久未用的 s-0 而不是它
+  svc.setSession({ ...make('old-but-active'), lastMessage: '还在聊' });
+  svc.setSession(make('newcomer'));
+  assert.ok(svc.get('old-but-active'), '活跃老会话被错误淘汰');
+  assert.equal(svc.get('s-0'), undefined);
+  assert.equal(svc.list().length, LIMITS.MAX_SESSIONS);
+});

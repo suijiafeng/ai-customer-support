@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import type { DailyMetricPoint, Metrics } from '@assistflow/shared';
 import { SessionsService } from '../sessions/sessions.service.js';
 import { TicketsService } from '../tickets/tickets.service.js';
@@ -9,7 +9,7 @@ function localDate(d = new Date()): string {
 }
 
 @Injectable()
-export class MetricsService implements OnModuleInit, OnModuleDestroy {
+export class MetricsService implements OnApplicationBootstrap, OnModuleDestroy {
   private timer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -18,7 +18,9 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     private readonly store: StoreService
   ) {}
 
-  onModuleInit() {
+  // 用 onApplicationBootstrap 而不是 onModuleInit：Nest 并行跑同模块的 onModuleInit，
+  // 此时 SessionsService/TicketsService 还没从库里载入，首个快照会把今天的指标覆盖成 0。
+  onApplicationBootstrap() {
     this.recordDaily();
     this.timer = setInterval(() => this.recordDaily(), 30 * 60 * 1000);
   }

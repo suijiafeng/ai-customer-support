@@ -95,14 +95,14 @@ export class SessionsService implements OnModuleInit {
   }
 
   setSession(session: Session): Session {
-    this.sessions.set(session.sessionId, session);
+    touch(this.sessions, session.sessionId, session);
     this.store.saveSession(session);
     trimMap(this.sessions, LIMITS.MAX_SESSIONS);
     return session;
   }
 
   setConversation(sessionId: string, messages: Message[]): Message[] {
-    this.conversations.set(sessionId, messages);
+    touch(this.conversations, sessionId, messages);
     this.store.saveConversation(sessionId, messages);
     trimMap(this.conversations, LIMITS.MAX_CONVERSATIONS);
     return messages;
@@ -113,13 +113,17 @@ export class SessionsService implements OnModuleInit {
     let messages = this.conversations.get(sessionId);
     if (!session) {
       session = await this.store.loadSession(sessionId);
-      if (session) this.sessions.set(sessionId, session);
+      if (session) {
+        touch(this.sessions, sessionId, session);
+        trimMap(this.sessions, LIMITS.MAX_SESSIONS);
+      }
     }
     if (messages === undefined) {
       const loaded = await this.store.loadConversation(sessionId);
       if (loaded) {
         messages = loaded;
-        this.conversations.set(sessionId, loaded);
+        touch(this.conversations, sessionId, loaded);
+        trimMap(this.conversations, LIMITS.MAX_CONVERSATIONS);
       }
     }
     return { session, messages: messages ?? [] };
@@ -321,6 +325,17 @@ function sortSessions(a: Session, b: Session): number {
   return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
 }
 
+/**
+ * 写入时把键挪到 Map 末尾，让插入顺序 = 最近使用顺序。
+ * Map.set 覆盖已有键不会改变顺序，纯 set 会让 trimMap 淘汰「最早创建」而非「最久未用」的会话：
+ * 一个聊了一上午的老会话会被刚进来的新访客挤出内存。
+ */
+function touch<K, V>(map: Map<K, V>, key: K, value: V) {
+  map.delete(key);
+  map.set(key, value);
+}
+
+/** 内存只保留最近使用的 N 条；淘汰只影响内存，库里仍有，可由 loadDetail 回灌 */
 function trimMap<K, V>(map: Map<K, V>, maxEntries: number) {
   while (map.size > maxEntries) {
     const firstKey = map.keys().next().value as K;
