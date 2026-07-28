@@ -96,6 +96,9 @@ export function resolveAiSettings(env: NodeJS.ProcessEnv = process.env) {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(__dirname, '..', '..', '..');
 
+// 本地配置文件都不进仓库（.gitignore 已忽略）：.env.local 优先，.env 其次，两者都可选。
+// 安全兜底值全部写在下面 appConfig / resolveAiSettings 的默认值里，没有任何文件也能启动。
+// 各项说明见根目录 .env.example。
 for (const file of ['.env.local', '.env']) {
   loadEnv({ path: path.join(repoRoot, file) });
 }

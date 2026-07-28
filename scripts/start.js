@@ -26,7 +26,7 @@ const scriptName = { dev: 'start:dev', prod: 'start:prod', demo: 'start:demo' }[
 const nodeEnv = mode === 'dev' ? 'development' : 'production';
 
 // 解析 PORT，与 config.ts 的加载优先级保持一致：
-// 真实环境变量 > .env.local > .env（默认 3001）
+// 真实环境变量 > .env.local > .env（两个文件都是本地可选、不进仓库；默认 3001）
 function resolvePort() {
   if (process.env.PORT) return process.env.PORT;
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');
