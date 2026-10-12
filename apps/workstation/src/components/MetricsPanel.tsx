@@ -5,9 +5,20 @@ import { fmtTime, requestJson } from '../api.js';
 import Icon from '../ui/Icon.js';
 
 const MAX_DAYS = 14;
-const CHART_H = 168; // 三张图统一高度：压缩概览区，给下方跟进事项留出空间
+const TREND_H = 200;
 
-/** 数据概览区块（页面上半部）：ECharts 可视化（柱状图 / 饼图 / 折线图），进入时拉取，每 15 秒自动刷新。 */
+// 图表配色：品牌青 + 蓝 + 橙（已过色盲可辨性校验）；「已关闭」用灰色弱化，只作背景
+const C_AI = '#0d9488';
+const C_ASSIGNED = '#2a78d6';
+const C_WAITING = '#eb6834';
+const C_CLOSED = '#d0d3d7';
+// 轴线 / 网格 / 文字：一律中性灰，退到数据后面
+const AXIS = '#e6e7ea';
+const GRID = '#f1f3f5';
+const TICK = '#989a9e';
+const LEGEND = '#6c6f72';
+
+/** 数据概览区块（页面上半部）：指标条 + 会话构成 + 每日趋势，进入时拉取，每 15 秒自动刷新。 */
 export default function MetricsPanel() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   // 每日趋势改由后端按天落库、聚合返回（团队级、跨端一致）
@@ -34,76 +45,69 @@ export default function MetricsPanel() {
     return () => clearInterval(timer);
   }, [load]);
 
-  const barOption = useMemo<echarts.EChartsOption | null>(() => {
-    if (!metrics) return null;
-    const rows = [
-      { label: '待跟进会话', value: metrics.queue.waitingHuman, color: '#5fb8ae' },
-      { label: '接待中会话', value: metrics.queue.assigned, color: '#0d9488' },
-      { label: '待处理工单', value: metrics.tickets.open, color: '#e88b8b' },
-      { label: '处理中工单', value: metrics.tickets.processing, color: '#c53030' },
+  // 会话构成：AI 接待 / 人工接待中 / 待跟进 / 已关闭（部分与整体，用一条横向堆叠条表达）
+  const composition = useMemo(() => {
+    if (!metrics) return [];
+    const { sessions } = metrics.totals;
+    const { waitingHuman, assigned, closed } = metrics.queue;
+    const bot = Math.max(0, sessions - waitingHuman - assigned - closed);
+    return [
+      { key: 'bot', name: 'AI 接待', value: bot, color: C_AI },
+      { key: 'assigned', name: '人工接待中', value: assigned, color: C_ASSIGNED },
+      { key: 'waiting', name: '待跟进', value: waitingHuman, color: C_WAITING },
+      { key: 'closed', name: '已关闭', value: closed, color: C_CLOSED },
     ];
-    return {
-      grid: { left: 92, right: 24, top: 8, bottom: 22 },
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      xAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#989a9e' }, splitLine: { lineStyle: { color: '#eceef0' } } },
-      yAxis: { type: 'category', data: rows.map((r) => r.label), axisLabel: { color: '#515458' }, axisLine: { lineStyle: { color: '#e6e7ea' } } },
-      series: [{
-        type: 'bar', barWidth: 12,
-        data: rows.map((r) => ({ value: r.value, itemStyle: { color: r.color, borderRadius: [0, 6, 6, 0] } })),
-        label: { show: true, position: 'right', color: '#1a1d21' },
-      }],
-    };
   }, [metrics]);
-
-  const pieOption = useMemo<echarts.EChartsOption | null>(() => {
-    if (!metrics) return null;
-    const bot = Math.max(0, metrics.totals.sessions - metrics.queue.waitingHuman - metrics.queue.assigned - metrics.queue.closed);
-    const data = [
-      { name: 'AI 接待', value: bot, itemStyle: { color: '#16a34a' } },
-      { name: '待跟进', value: metrics.queue.waitingHuman, itemStyle: { color: '#d97706' } },
-      { name: '接待中', value: metrics.queue.assigned, itemStyle: { color: '#0d9488' } },
-      { name: '已关闭', value: metrics.queue.closed, itemStyle: { color: '#989a9e' } },
-    ];
-    return {
-      tooltip: { trigger: 'item', formatter: '{b}: {c}（{d}%）' },
-      legend: { orient: 'vertical', right: 8, top: 'center', textStyle: { color: '#515458' } },
-      series: [{
-        type: 'pie', radius: ['55%', '80%'], center: ['38%', '50%'], avoidLabelOverlap: true,
-        itemStyle: { borderColor: '#fff', borderWidth: 2 },
-        label: { show: true, position: 'center', formatter: `{total|${metrics.totals.sessions}}\n{sub|总会话}`,
-          rich: { total: { fontSize: 24, fontWeight: 'bold', color: '#1a1d21' }, sub: { fontSize: 11, color: '#989a9e' } } },
-        emphasis: { label: { show: true } },
-        data,
-      }],
-    };
-  }, [metrics]);
+  const compositionTotal = composition.reduce((sum, c) => sum + c.value, 0);
 
   const lineOption = useMemo<echarts.EChartsOption>(() => ({
-    tooltip: { trigger: 'axis' },
-    legend: { top: 0, textStyle: { color: '#515458' } },
-    grid: { left: 36, right: 18, top: 28, bottom: 22 },
-    xAxis: { type: 'category', boundaryGap: false, data: history.map((h) => h.date.slice(5)), axisLabel: { color: '#989a9e' }, axisLine: { lineStyle: { color: '#e6e7ea' } } },
-    yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#989a9e' }, splitLine: { lineStyle: { color: '#eceef0' } } },
+    color: [C_AI, C_ASSIGNED, C_WAITING],
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'line', lineStyle: { color: AXIS } },
+      backgroundColor: '#fff',
+      borderColor: AXIS,
+      textStyle: { color: '#1a1d21', fontSize: 12 },
+    },
+    legend: {
+      top: 0, right: 0, icon: 'roundRect', itemWidth: 12, itemHeight: 3, itemGap: 16,
+      textStyle: { color: LEGEND, fontSize: 12 },
+    },
+    grid: { left: 28, right: 8, top: 32, bottom: 24 },
+    xAxis: {
+      type: 'category', boundaryGap: false,
+      data: history.map((h) => h.date.slice(5)),
+      axisLine: { lineStyle: { color: AXIS } }, axisTick: { show: false },
+      axisLabel: { color: TICK, fontSize: 11 },
+    },
+    yAxis: {
+      type: 'value', minInterval: 1,
+      axisLabel: { color: TICK, fontSize: 11 },
+      splitLine: { lineStyle: { color: GRID, type: 'solid' } },
+    },
     series: [
-      { name: '待跟进', type: 'line', smooth: true, showSymbol: true, data: history.map((h) => h.waiting), itemStyle: { color: '#d97706' }, areaStyle: { opacity: 0.08 } },
-      { name: '接待中', type: 'line', smooth: true, showSymbol: true, data: history.map((h) => h.assigned), itemStyle: { color: '#0d9488' }, areaStyle: { opacity: 0.08 } },
-      { name: '活跃会话', type: 'line', smooth: true, showSymbol: true, data: history.map((h) => h.activeSessions), itemStyle: { color: '#16a34a' }, areaStyle: { opacity: 0.08 } },
-    ],
+      { name: '活跃会话', data: history.map((h) => h.activeSessions) },
+      { name: '人工接待中', data: history.map((h) => h.assigned) },
+      { name: '待跟进', data: history.map((h) => h.waiting) },
+    ].map((s) => ({
+      ...s,
+      type: 'line' as const,
+      showSymbol: false,
+      symbolSize: 8,
+      lineStyle: { width: 2 },
+      emphasis: { focus: 'series' as const },
+    })),
   }), [history]);
 
-  const pieHasData = !!metrics && metrics.totals.sessions > 0;
-  const barHasData =
-    !!metrics &&
-    metrics.queue.waitingHuman + metrics.queue.assigned + metrics.tickets.open + metrics.tickets.processing > 0;
   const lineHasData = history.some((h) => h.waiting + h.assigned + h.activeSessions > 0);
 
   return (
     <section className="panel-block" aria-label="数据概览">
       <div className="panel-toolbar">
         <h2 className="block-title">数据概览</h2>
-        <div className="toolbar-right">
-          {metrics && <span className="metrics-time">更新于 {fmtTime(metrics.generatedAt)}（15 秒自动刷新）</span>}
-        </div>
+        {metrics && (
+          <span className="metrics-time" title="每 15 秒自动刷新">更新于 {fmtTime(metrics.generatedAt)}</span>
+        )}
       </div>
 
       {error ? (
@@ -112,38 +116,71 @@ export default function MetricsPanel() {
         <div className="loading-center"><div className="spinner" /></div>
       ) : (
         <>
-        <div className="kpi-grid">
-          {[
-            { label: '总会话', value: metrics.totals.sessions, tone: 'accent' },
-            { label: '待跟进', value: metrics.queue.waitingHuman, tone: 'warn' },
-            { label: '接待中', value: metrics.queue.assigned, tone: 'accent' },
-            { label: '待处理工单', value: metrics.tickets.open, tone: 'danger' },
-            { label: '处理中工单', value: metrics.tickets.processing, tone: 'warn' },
-            { label: 'AI 解决率', value: `${metrics.ai.automationRate}%`, tone: 'ok' },
-          ].map((k) => (
-            <div key={k.label} className={`kpi-card kpi-${k.tone}`}>
-              <span className="kpi-label">{k.label}</span>
-              <b className="kpi-value">{k.value}</b>
-            </div>
-          ))}
-        </div>
-        <div className="chart-grid">
-          <section className="chart-card">
-            <h3>会话状态分布</h3>
-            {pieHasData && pieOption ? <EChart option={pieOption} height={CHART_H} /> : <ChartEmpty height={CHART_H} />}
-          </section>
+          {/* 指标条：一条面板 + 细分隔线；需要处理的指标大于 0 时，标签前加一个小提示点 */}
+          <div className="stat-strip">
+            {[
+              { label: '总会话', value: metrics.totals.sessions },
+              { label: '人工接待中', value: metrics.queue.assigned },
+              { label: '待跟进', value: metrics.queue.waitingHuman, attention: metrics.queue.waitingHuman > 0 },
+              { label: '待处理工单', value: metrics.tickets.open, attention: metrics.tickets.open > 0 },
+              { label: '处理中工单', value: metrics.tickets.processing },
+              { label: 'AI 解决率', value: `${metrics.ai.automationRate}%` },
+            ].map((s) => (
+              <div key={s.label} className="stat">
+                <span className="stat-label">
+                  {s.attention && <i className="stat-dot" aria-hidden="true" />}
+                  {s.label}
+                  {s.attention && <span className="sr-only">（需要处理）</span>}
+                </span>
+                <b className="stat-value">{s.value}</b>
+              </div>
+            ))}
+          </div>
 
-          <section className="chart-card">
-            <h3>待办负载</h3>
-            {barHasData && barOption ? <EChart option={barOption} height={CHART_H} /> : <ChartEmpty height={CHART_H} />}
-          </section>
+          <div className="overview-grid">
+            <section className="chart-card">
+              <div className="chart-head">
+                <h3>会话构成</h3>
+                <span className="chart-sub">共 {compositionTotal} 个</span>
+              </div>
+              {compositionTotal > 0 ? (
+                <>
+                  <div
+                    className="compose-bar"
+                    role="img"
+                    aria-label={composition.map((c) => `${c.name} ${c.value}`).join('，')}
+                  >
+                    {composition.filter((c) => c.value > 0).map((c) => (
+                      <span
+                        key={c.key}
+                        className="compose-seg"
+                        style={{ flexGrow: c.value, background: c.color }}
+                        title={`${c.name}：${c.value}（${Math.round((c.value / compositionTotal) * 100)}%）`}
+                      />
+                    ))}
+                  </div>
+                  <ul className="compose-legend">
+                    {composition.map((c) => (
+                      <li key={c.key}>
+                        <i style={{ background: c.color }} aria-hidden="true" />
+                        <span className="compose-name">{c.name}</span>
+                        <b>{c.value}</b>
+                        <span className="compose-pct">{Math.round((c.value / compositionTotal) * 100)}%</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : <ChartEmpty height={120} />}
+            </section>
 
-          <section className="chart-card">
-            <h3>每日趋势</h3>
-            {lineHasData ? <EChart option={lineOption} height={CHART_H} /> : <ChartEmpty height={CHART_H} text="正在采集数据…" />}
-            <p className="chart-note">按天聚合，最多展示最近 {MAX_DAYS} 天。</p>
-          </section>
-        </div>
+            <section className="chart-card">
+              <div className="chart-head">
+                <h3>每日趋势</h3>
+                <span className="chart-sub">近 {MAX_DAYS} 天</span>
+              </div>
+              {lineHasData ? <EChart option={lineOption} height={TREND_H} /> : <ChartEmpty height={TREND_H} text="正在采集数据…" />}
+            </section>
+          </div>
         </>
       )}
     </section>
