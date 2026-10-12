@@ -26,7 +26,7 @@
 
 ## 三、优先级低（锦上添花或需要新基础设施）
 
-- **邮件转发对话记录 / 离线邮件通知**（Papercups、Chaskiq）：根目录已有 `sendEmail.js`，可在工单创建、会话关闭时发邮件；需要 SMTP 配置。
+- **邮件转发对话记录 / 离线邮件通知**（Papercups、Chaskiq）：可在工单创建、会话关闭时发邮件；需要 SMTP 配置。
 - **多渠道接入**（Chatwoot：WhatsApp、Telegram、邮件）：对个人主页场景价值有限，暂不建议。
 - **AI 对话摘要**：会话关闭或转人工时让模型生成三句摘要写入 `session.reason`，客服接手不用翻全部历史。现有 `AiService.buildReply` 结构可直接复用。
 - **访客在线状态 / 已读回执**：需要 widget 定时心跳，与 SSE 现有心跳合并即可，但价值一般。
