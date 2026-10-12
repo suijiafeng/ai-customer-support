@@ -3,6 +3,7 @@ import type { Ticket } from '@assistflow/shared';
 import { fmtTime, intentText, requestJson, type AgentIdentity } from '../api.js';
 import { showToast } from '../ui/feedback.js';
 import Icon from '../ui/Icon.js';
+import EmptyState from '../ui/EmptyState.js';
 
 const STATUS_TEXT: Record<string, string> = { open: '待处理', processing: '处理中', resolved: '已解决' };
 const STATUS_TAG: Record<string, string> = { open: 'warning', processing: 'primary', resolved: 'success' };
@@ -114,7 +115,17 @@ export default function TicketsPanel({ agent, onOpenSession }: TicketsPanelProps
       ) : loading && !tickets.length ? (
         <div className="loading-center"><div className="spinner" /></div>
       ) : !visible.length ? (
-        <div className="empty"><Icon name="list" size={28} style={{ opacity: .4, marginBottom: 4 }} />暂无跟进事项</div>
+        filter === 'open' || filter === 'processing' ? (
+          <EmptyState
+            compact
+            icon="ticket"
+            title="太棒了，没有待处理的跟进事项"
+            hint="新的跟进事项出现时会自动刷新"
+            action={{ label: '查看已解决', onClick: () => setFilter('resolved') }}
+          />
+        ) : (
+          <EmptyState compact icon="ticket" title="暂无跟进事项" hint="访客留下的需求会在这里形成跟进事项" />
+        )
       ) : (
         <div className={`ticket-table-wrap${loading ? ' stale' : ''}`}>
           <table className="ticket-table">

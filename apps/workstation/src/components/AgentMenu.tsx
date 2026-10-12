@@ -9,17 +9,19 @@ interface AgentMenuProps {
   sessions: SessionSummary[];
   connected: boolean;
   onLogout: () => void;
+  /** pill：顶栏头像胶囊（移动端）；card：侧栏底部状态卡（桌面端），下拉向上弹出 */
+  variant?: 'pill' | 'card';
 }
 
 // 头像底色：按工号取色，三个客服各不相同
-const AVATAR_COLORS = ['#7c3aed', '#0e9f6e', '#d97706', '#2457c5'];
+const AVATAR_COLORS = ['#7c3aed', '#0e9f6e', '#d97706', '#0d9488'];
 function avatarColor(id: string): string {
   const n = [...id].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
   return AVATAR_COLORS[n % AVATAR_COLORS.length];
 }
 
 /** 右上角客服入口：触发器只显示头像+名称，点击下拉展开个人详情与操作。 */
-export default function AgentMenu({ agent, sessions, connected, onLogout }: AgentMenuProps) {
+export default function AgentMenu({ agent, sessions, connected, onLogout, variant = 'pill' }: AgentMenuProps) {
   const [open, setOpen] = useState(false);
   const wrapEl = useRef<HTMLDivElement | null>(null);
   const close = useHistoryBack(open, () => setOpen(false));
@@ -53,18 +55,38 @@ export default function AgentMenu({ agent, sessions, connected, onLogout }: Agen
   const color = avatarColor(agent.id);
 
   return (
-    <div className="agent-menu" ref={wrapEl}>
-      {/* 触发器：尽量简洁，只展示头像 + 名称 */}
-      <button
-        className="agent-trigger"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="avatar-badge" style={{ background: color }}>{initials}</span>
-        <span className="agent-name">{agent.name}</span>
-        <Icon name="chevron-down" size={14} style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none' }} />
-      </button>
+    <div className={`agent-menu agent-menu--${variant}`} ref={wrapEl}>
+      {variant === 'card' ? (
+        /* 侧栏状态卡：名称 + 在线状态 + 当前工作量，点击展开详情与操作 */
+        <button
+          className="agent-status-card"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span className="avatar-badge" style={{ background: color }}>{initials}</span>
+          <span className="agent-status-info">
+            <span className="agent-status-line">
+              <b>{agent.name}</b>
+              <span className={`online${connected ? '' : ' off'}`}><i aria-hidden="true" />{connected ? '在线' : '离线'}</span>
+            </span>
+            <span className="agent-status-sub">接待中 {myActive} · 已解决 {myResolved}</span>
+          </span>
+          <Icon name="chevron-down" size={14} style={{ transition: 'transform .2s', transform: open ? 'none' : 'rotate(180deg)' }} />
+        </button>
+      ) : (
+        /* 触发器：尽量简洁，只展示头像 + 名称 */
+        <button
+          className="agent-trigger"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span className="avatar-badge" style={{ background: color }}>{initials}</span>
+          <span className="agent-name">{agent.name}</span>
+          <Icon name="chevron-down" size={14} style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none' }} />
+        </button>
+      )}
 
       {open && (
         <div className="agent-overlay" aria-hidden="true" onClick={close} />

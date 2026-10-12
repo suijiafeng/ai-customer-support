@@ -77,8 +77,16 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
     closeQueue();
   }, []);
 
+  const poolCount = useMemo(
+    () => sessions.filter((s) => !s.assignedAgentId && s.status !== 'closed').length,
+    [sessions],
+  );
+  // 移动端侧栏即抽屉：会话接待时展示队列，数据管理时展示子菜单
+  const sideOpen = view === 'sessions' ? queueOpen : systemMenuOpen;
+
   return (
     <div className="app">
+      {/* 顶栏仅在移动端显示（汉堡 + 客服头像 + 底部 Tab）；桌面端导航全部收进左侧深色侧栏 */}
       <header className="topbar">
         <div className="topbar-left">
           {view === 'sessions' && (
@@ -119,8 +127,33 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
         </div>
       </header>
       <div className="body">
-        {view === 'sessions' && (
-          <>
+        <aside className={`side${sideOpen ? ' open' : ''}`} aria-label="侧边栏">
+          <div className="side-head">
+            <button className="side-brand" type="button" onClick={() => setView('sessions')}>
+              <span className="side-logo"><Icon name="brand" size={16} /></span>
+              <span className="side-brand-text">
+                <strong>客服工作台</strong>
+                <small>
+                  <i className={`side-dot${connected ? '' : ' off'}`} aria-hidden="true" />
+                  {connected ? '实时连接' : '重连中'} · {poolCount} 位待接待
+                </small>
+              </span>
+            </button>
+            <nav className="side-nav" aria-label="功能页签">
+              {VIEWS.map((v) => (
+                <button
+                  key={v.key}
+                  aria-current={view === v.key}
+                  className={view === v.key ? 'active' : ''}
+                  onClick={() => setView(v.key)}
+                >
+                  <Icon name={v.icon} size={16} />
+                  {v.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+          {view === 'sessions' ? (
             <SessionQueue
               sessions={sessions}
               activeId={activeId}
@@ -129,13 +162,9 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
               agent={agent}
               ready={queueReady}
             />
-            {queueOpen && <div className="queue-overlay" onClick={closeQueue} aria-hidden="true" />}
-            <ChatPanel session={activeSession} agent={agent} />
-          </>
-        )}
-        {view === 'system' && (
-          <div className="admin-layout">
-            <nav className={`admin-sidenav${systemMenuOpen ? ' open' : ''}`} aria-label="数据管理子菜单">
+          ) : (
+            <nav className="admin-sidenav" aria-label="数据管理子菜单">
+              <div className="side-section-label">数据管理</div>
               {systemSubViews.map((sv) => (
                 <button
                   key={sv.key}
@@ -148,7 +177,21 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
                 </button>
               ))}
             </nav>
-            {systemMenuOpen && <div className="queue-overlay" onClick={closeSystemMenu} aria-hidden="true" />}
+          )}
+          <div className="side-foot">
+            <AgentMenu agent={agent} sessions={sessions} connected={connected} onLogout={onLogout} variant="card" />
+          </div>
+        </aside>
+        {sideOpen && (
+          <div
+            className="queue-overlay"
+            onClick={view === 'sessions' ? closeQueue : closeSystemMenu}
+            aria-hidden="true"
+          />
+        )}
+        {view === 'sessions' && <ChatPanel session={activeSession} agent={agent} />}
+        {view === 'system' && (
+          <div className="admin-layout">
             {systemSubView === 'ops' && (
               <OperationsPanel agent={agent} onOpenSession={(id) => { setView('sessions'); handleSelect(id); }} />
             )}

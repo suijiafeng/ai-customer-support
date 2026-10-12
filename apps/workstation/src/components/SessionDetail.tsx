@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { SessionSummary, Ticket } from '@assistflow/shared';
-import { intentText, requestJson } from '../api.js';
+import { fmtTime, intentText, requestJson } from '../api.js';
 import { showToast, confirmDialog } from '../ui/feedback.js';
 import Icon from '../ui/Icon.js';
 
@@ -11,9 +11,11 @@ interface SessionDetailProps {
   session: SessionSummary;
   onClose: () => void;
   canResolve?: boolean;
+  /** 宽屏常驻在聊天区右侧（无遮罩、无底部弹出动画） */
+  docked?: boolean;
 }
 
-export default function SessionDetail({ session, onClose, canResolve = true }: SessionDetailProps) {
+export default function SessionDetail({ session, onClose, canResolve = true, docked = false }: SessionDetailProps) {
   const [resolving, setResolving] = useState(false);
   const wf = session.workflow;
   const ticket: Ticket | null = wf?.ticket || null;
@@ -40,9 +42,9 @@ export default function SessionDetail({ session, onClose, canResolve = true }: S
   };
 
   return (
-    <aside className="detail-pane" aria-label="会话详情">
+    <aside className={`detail-pane${docked ? ' docked' : ''}`} aria-label="会话详情">
       <div className="detail-head">
-        <span>会话详情</span>
+        <span>会话信息</span>
         <button className="detail-close" aria-label="收起详情" onClick={onClose}>×</button>
       </div>
       <div className="detail-scroll">
@@ -59,6 +61,7 @@ export default function SessionDetail({ session, onClose, canResolve = true }: S
                 <dd><a href={session.visitor.pageUrl} target="_blank" rel="noopener noreferrer">{session.visitor.pageUrl}</a></dd>
               </div>
             )}
+            <div><dt>开始时间</dt><dd>{fmtTime(session.createdAt) || '—'}</dd></div>
             <div><dt>优先级</dt><dd>{session.priority === 'high' ? '高' : '普通'}</dd></div>
           </dl>
         </section>

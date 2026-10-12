@@ -17,7 +17,9 @@ type IconName =
   | 'send'
   | 'chevron-down'
   | 'building'
-  | 'user';
+  | 'user'
+  | 'panel-right'
+  | 'brand';
 
 const PATHS: Record<IconName, React.ReactNode> = {
   menu: <><line x1="4" y1="6" x2="20" y2="6" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="18" x2="20" y2="18" /></>,
@@ -37,6 +39,9 @@ const PATHS: Record<IconName, React.ReactNode> = {
   'chevron-down': <polyline points="6 9 12 15 18 9" />,
   building: <><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18z" /><path d="M6 12H4a2 2 0 0 0-2 2v8h4" /><path d="M18 9h2a2 2 0 0 1 2 2v11h-4" /><line x1="10" y1="6" x2="10" y2="6" /><line x1="14" y1="6" x2="14" y2="6" /><line x1="10" y1="10" x2="10" y2="10" /><line x1="14" y1="10" x2="14" y2="10" /><line x1="10" y1="14" x2="10" y2="14" /><line x1="14" y1="14" x2="14" y2="14" /></>,
   user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></>,
+  'panel-right': <><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="15" y1="3" x2="15" y2="21" /></>,
+  // 品牌标记：对话气泡内三条文字线（与设计稿 logo 一致）
+  brand: <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="8" y1="8" x2="16" y2="8" /><line x1="8" y1="12" x2="13" y2="12" /></>,
 };
 
 interface IconProps {

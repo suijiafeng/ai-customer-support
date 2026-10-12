@@ -81,6 +81,7 @@ const SessionItem = memo(function SessionItem({ s, active, unread, onSelect }: S
       <div className="sess-main">
         <div className="sess-top">
           <span className="name">{s.displayName}</span>
+          {waiting && <span className="human-tag" title="访客请求人工接待">人工</span>}
           {!done && s.priority === 'high' && <span className="prio-tag" title="高优先级">急</span>}
           {!done && s.sentiment === 'negative' && <span className="mood-tag" title="客户情绪负面，请优先安抚">⚠</span>}
           <span className={`sess-time${waiting ? ' waiting' : ''}`}>
@@ -212,7 +213,7 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
   );
 
   return (
-    <aside className={`queue${open ? ' open' : ''}`} aria-label="会话列表">
+    <section className={`queue${open ? ' open' : ''}`} aria-label="会话列表">
       <div className="queue-top">
         <input
           className="queue-search"
@@ -293,6 +294,6 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
           </div>
         </div>
       </div>
-    </aside>
+    </section>
   );
 }

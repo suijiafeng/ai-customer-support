@@ -3,6 +3,7 @@ import type { Faq } from '@assistflow/shared';
 import { requestJson } from '../api.js';
 import { showToast, confirmDialog } from '../ui/feedback.js';
 import Icon from '../ui/Icon.js';
+import EmptyState from '../ui/EmptyState.js';
 
 const EMPTY_FORM = { question: '', intent: '', answer: '', keywords: '' };
 
@@ -205,13 +206,23 @@ export default function FaqsPanel({ isAdmin }: { isAdmin: boolean }) {
           加载失败 <button type="button" className="link-btn" onClick={load}>重试</button>
         </div>
       ) : faqs.length === 0 ? (
-        <div className="empty">
-          <Icon name="message-circle" size={28} style={{ opacity: 0.4, marginBottom: 4 }} />
-          {query || intent ? '没有找到相关问答' : '还没有问答条目'}
-          {isAdmin && !query && !intent && (
-            <div><button type="button" className="link-btn" onClick={openCreate}>新增第一条</button></div>
-          )}
-        </div>
+        query || intent ? (
+          <EmptyState
+            compact
+            icon="search"
+            title="没有找到相关问答"
+            hint="换个关键词或意图筛选试试"
+            action={{ label: '清空搜索', onClick: () => { setQuery(''); setIntent(''); } }}
+          />
+        ) : (
+          <EmptyState
+            compact
+            icon="book"
+            title="还没有问答条目"
+            hint="添加后，访客提问会优先命中知识库"
+            action={isAdmin ? { label: '新增第一条', onClick: openCreate } : undefined}
+          />
+        )
       ) : (
         <section className="faq-list" aria-label="问答列表">
           {faqs.map((f) => (
@@ -238,8 +249,8 @@ export default function FaqsPanel({ isAdmin }: { isAdmin: boolean }) {
       )}
 
       {showForm && (
-        <div className="modal-mask" onClick={closeForm}>
-          <div className="modal modal-wide" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={editing ? '编辑问答' : '新增问答'}>
+        <div className="modal-mask drawer-mask" onClick={closeForm}>
+          <div className="modal drawer" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={editing ? '编辑问答' : '新增问答'}>
             <h3>{editing ? '编辑问答' : '新增问答'}</h3>
             {editing && <p className="form-hint mono">id: {editing.id} · 系统生成，不可改</p>}
             <label className="form-field">

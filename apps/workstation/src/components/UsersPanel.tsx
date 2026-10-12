@@ -160,9 +160,17 @@ export default function UsersPanel() {
         {users.length === 0 && <div className="empty">还没有账号，点击右上角新建</div>}
       </section>
 
+      <section className="panel-block role-note" aria-label="角色说明">
+        <h3>角色说明</h3>
+        <dl>
+          <div><dt><span className="tag tag-brand">管理员</span></dt><dd>全部功能：会话接待、数据概览、知识库编辑，以及租户 / 模型 / 用户管理</dd></div>
+          <div><dt><span className="tag tag-gray">客服</span></dt><dd>会话接待与跟进事项处理；可查看数据概览和知识库（只读），看不到租户 / 模型 / 用户管理</dd></div>
+        </dl>
+      </section>
+
       {(showCreate || editing) && (
-        <div className="modal-mask" onClick={closeForm}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={editing ? '编辑账号' : '新建账号'}>
+        <div className="modal-mask drawer-mask" onClick={closeForm}>
+          <div className="modal drawer" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={editing ? '编辑账号' : '新建账号'}>
             <h3>{editing ? `编辑账号 ${editing.id}` : '新建账号'}</h3>
             {!editing && (
               <label className="form-field">

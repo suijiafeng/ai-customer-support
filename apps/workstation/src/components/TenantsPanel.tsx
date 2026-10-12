@@ -3,6 +3,7 @@ import type { Tenant, TenantStats } from '@assistflow/shared';
 import { fmtTime, requestJson } from '../api.js';
 import { showToast, confirmDialog } from '../ui/feedback.js';
 import Icon from '../ui/Icon.js';
+import EmptyState from '../ui/EmptyState.js';
 
 const PAGE_SIZE = 10;
 
@@ -161,7 +162,13 @@ export default function TenantsPanel() {
       ) : !tenants.length ? (
         <div className="empty"><Icon name="building" size={28} style={{ opacity: .4, marginBottom: 4 }} />暂无租户，访客将无法接入客服</div>
       ) : !filtered.length ? (
-        <div className="empty"><Icon name="search" size={28} style={{ opacity: .4, marginBottom: 4 }} />未找到匹配「{query.trim()}」的租户</div>
+        <EmptyState
+          compact
+          icon="search"
+          title={`未找到匹配「${query.trim()}」的租户`}
+          hint="检查拼写，或按租户 ID / 域名搜索"
+          action={{ label: '清空搜索', onClick: () => onSearch('') }}
+        />
       ) : (
         <>
           <div className={`ticket-table-wrap${loading ? ' stale' : ''}`}>
@@ -253,8 +260,8 @@ function EditTenantModal({
   };
 
   return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog" role="dialog" aria-label="编辑租户" onClick={(e) => e.stopPropagation()}>
+    <div className="dialog-overlay drawer-mask" onClick={onClose}>
+      <div className="dialog drawer" role="dialog" aria-label="编辑租户" onClick={(e) => e.stopPropagation()}>
         <h3 className="dialog-title">编辑租户</h3>
         <div className="field">
           <label htmlFor="edit-tenant-name">租户名称 <i className="req">*</i></label>
@@ -358,8 +365,8 @@ function CreateTenantModal({ onClose, onCreated }: { onClose: () => void; onCrea
   };
 
   return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog" role="dialog" aria-label="新建租户" onClick={(e) => e.stopPropagation()}>
+    <div className="dialog-overlay drawer-mask" onClick={onClose}>
+      <div className="dialog drawer" role="dialog" aria-label="新建租户" onClick={(e) => e.stopPropagation()}>
         <h3 className="dialog-title">新建租户</h3>
         <div className="field">
           <label htmlFor="tenant-name">租户名称 <i className="req">*</i></label>

@@ -37,20 +37,20 @@ export default function MetricsPanel() {
   const barOption = useMemo<echarts.EChartsOption | null>(() => {
     if (!metrics) return null;
     const rows = [
-      { label: '待跟进会话', value: metrics.queue.waitingHuman, color: '#7d9ae4' },
-      { label: '接待中会话', value: metrics.queue.assigned, color: '#2457c5' },
+      { label: '待跟进会话', value: metrics.queue.waitingHuman, color: '#5fb8ae' },
+      { label: '接待中会话', value: metrics.queue.assigned, color: '#0d9488' },
       { label: '待处理工单', value: metrics.tickets.open, color: '#e88b8b' },
       { label: '处理中工单', value: metrics.tickets.processing, color: '#c53030' },
     ];
     return {
       grid: { left: 92, right: 24, top: 8, bottom: 22 },
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      xAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: '#eef2f7' } } },
-      yAxis: { type: 'category', data: rows.map((r) => r.label), axisLabel: { color: '#475569' }, axisLine: { lineStyle: { color: '#e2e8f0' } } },
+      xAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#989a9e' }, splitLine: { lineStyle: { color: '#eceef0' } } },
+      yAxis: { type: 'category', data: rows.map((r) => r.label), axisLabel: { color: '#515458' }, axisLine: { lineStyle: { color: '#e6e7ea' } } },
       series: [{
         type: 'bar', barWidth: 12,
         data: rows.map((r) => ({ value: r.value, itemStyle: { color: r.color, borderRadius: [0, 6, 6, 0] } })),
-        label: { show: true, position: 'right', color: '#0f172a' },
+        label: { show: true, position: 'right', color: '#1a1d21' },
       }],
     };
   }, [metrics]);
@@ -61,17 +61,17 @@ export default function MetricsPanel() {
     const data = [
       { name: 'AI 接待', value: bot, itemStyle: { color: '#16a34a' } },
       { name: '待跟进', value: metrics.queue.waitingHuman, itemStyle: { color: '#d97706' } },
-      { name: '接待中', value: metrics.queue.assigned, itemStyle: { color: '#2457c5' } },
-      { name: '已关闭', value: metrics.queue.closed, itemStyle: { color: '#94a3b8' } },
+      { name: '接待中', value: metrics.queue.assigned, itemStyle: { color: '#0d9488' } },
+      { name: '已关闭', value: metrics.queue.closed, itemStyle: { color: '#989a9e' } },
     ];
     return {
       tooltip: { trigger: 'item', formatter: '{b}: {c}（{d}%）' },
-      legend: { orient: 'vertical', right: 8, top: 'center', textStyle: { color: '#475569' } },
+      legend: { orient: 'vertical', right: 8, top: 'center', textStyle: { color: '#515458' } },
       series: [{
         type: 'pie', radius: ['55%', '80%'], center: ['38%', '50%'], avoidLabelOverlap: true,
         itemStyle: { borderColor: '#fff', borderWidth: 2 },
         label: { show: true, position: 'center', formatter: `{total|${metrics.totals.sessions}}\n{sub|总会话}`,
-          rich: { total: { fontSize: 24, fontWeight: 'bold', color: '#0f172a' }, sub: { fontSize: 11, color: '#94a3b8' } } },
+          rich: { total: { fontSize: 24, fontWeight: 'bold', color: '#1a1d21' }, sub: { fontSize: 11, color: '#989a9e' } } },
         emphasis: { label: { show: true } },
         data,
       }],
@@ -80,13 +80,13 @@ export default function MetricsPanel() {
 
   const lineOption = useMemo<echarts.EChartsOption>(() => ({
     tooltip: { trigger: 'axis' },
-    legend: { top: 0, textStyle: { color: '#475569' } },
+    legend: { top: 0, textStyle: { color: '#515458' } },
     grid: { left: 36, right: 18, top: 28, bottom: 22 },
-    xAxis: { type: 'category', boundaryGap: false, data: history.map((h) => h.date.slice(5)), axisLabel: { color: '#94a3b8' }, axisLine: { lineStyle: { color: '#e2e8f0' } } },
-    yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: '#eef2f7' } } },
+    xAxis: { type: 'category', boundaryGap: false, data: history.map((h) => h.date.slice(5)), axisLabel: { color: '#989a9e' }, axisLine: { lineStyle: { color: '#e6e7ea' } } },
+    yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#989a9e' }, splitLine: { lineStyle: { color: '#eceef0' } } },
     series: [
       { name: '待跟进', type: 'line', smooth: true, showSymbol: true, data: history.map((h) => h.waiting), itemStyle: { color: '#d97706' }, areaStyle: { opacity: 0.08 } },
-      { name: '接待中', type: 'line', smooth: true, showSymbol: true, data: history.map((h) => h.assigned), itemStyle: { color: '#2457c5' }, areaStyle: { opacity: 0.08 } },
+      { name: '接待中', type: 'line', smooth: true, showSymbol: true, data: history.map((h) => h.assigned), itemStyle: { color: '#0d9488' }, areaStyle: { opacity: 0.08 } },
       { name: '活跃会话', type: 'line', smooth: true, showSymbol: true, data: history.map((h) => h.activeSessions), itemStyle: { color: '#16a34a' }, areaStyle: { opacity: 0.08 } },
     ],
   }), [history]);
@@ -111,6 +111,22 @@ export default function MetricsPanel() {
       ) : !metrics ? (
         <div className="loading-center"><div className="spinner" /></div>
       ) : (
+        <>
+        <div className="kpi-grid">
+          {[
+            { label: '总会话', value: metrics.totals.sessions, tone: 'accent' },
+            { label: '待跟进', value: metrics.queue.waitingHuman, tone: 'warn' },
+            { label: '接待中', value: metrics.queue.assigned, tone: 'accent' },
+            { label: '待处理工单', value: metrics.tickets.open, tone: 'danger' },
+            { label: '处理中工单', value: metrics.tickets.processing, tone: 'warn' },
+            { label: 'AI 解决率', value: `${metrics.ai.automationRate}%`, tone: 'ok' },
+          ].map((k) => (
+            <div key={k.label} className={`kpi-card kpi-${k.tone}`}>
+              <span className="kpi-label">{k.label}</span>
+              <b className="kpi-value">{k.value}</b>
+            </div>
+          ))}
+        </div>
         <div className="chart-grid">
           <section className="chart-card">
             <h3>会话状态分布</h3>
@@ -128,6 +144,7 @@ export default function MetricsPanel() {
             <p className="chart-note">按天聚合，最多展示最近 {MAX_DAYS} 天。</p>
           </section>
         </div>
+        </>
       )}
     </section>
   );
