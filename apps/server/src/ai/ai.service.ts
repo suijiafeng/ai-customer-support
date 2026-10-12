@@ -5,9 +5,9 @@ import path from 'node:path';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import OpenAI from 'openai';
 import type { AiUsage, Inquiry, Message, Ticket } from '@assistflow/shared';
-import { appConfig, AI_PROVIDER_PRESETS } from '../config.js';
+import { appConfig } from '../config.js';
 import type { HandoffDecision, ScoredFaq } from '../rules/rules.js';
-import { ModelSettingsService } from './model-settings.service.js';
+import { ModelSettingsService, type ActiveConnection } from './model-settings.service.js';
 
 export interface BuildReplyParams {
   message: string;
@@ -41,33 +41,26 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly modelSettings: ModelSettingsService) {}
 
   /**
-   * OpenAI 兼容客户端：延迟构建 + 按连接参数缓存。
-   * 运营在工作台切换默认厂商/模型后，下次调用自动重建，无需重启。
+   * OpenAI 兼容客户端：延迟构建 + 按连接参数（Key + 地址）缓存。
+   * 切换默认模型 / 修改模型配置后，下次调用自动使用新参数，无需重启。
    */
-  private client: OpenAI | null = null;
-  private clientCacheKey = '';
+  private readonly clients = new Map<string, OpenAI>();
 
-  /** 当前生效的连接参数：厂商/模型跟随运营设置；baseUrl 仅在厂商与 env 一致时沿用 env 覆盖。 */
-  private resolveConnection(): { provider: string; model: string; baseUrl: string; apiKey: string } {
-    const provider = this.modelSettings.getActiveProvider();
-    const model = this.modelSettings.getActiveModel();
-    const preset = AI_PROVIDER_PRESETS[provider];
-    const baseUrl = provider === appConfig.aiProvider ? appConfig.aiBaseUrl : preset?.baseUrl || '';
-    return { provider, model, baseUrl, apiKey: appConfig.aiApiKey };
+  private clientFor(conn: ActiveConnection): OpenAI | null {
+    if (!conn.apiKey) return null;
+    const cacheKey = `${conn.apiKey}\n${conn.baseUrl}`;
+    let client = this.clients.get(cacheKey);
+    if (!client) {
+      // 配置频繁变更时防止旧客户端无限堆积
+      if (this.clients.size >= 32) this.clients.clear();
+      client = new OpenAI({ apiKey: conn.apiKey, ...(conn.baseUrl ? { baseURL: conn.baseUrl } : {}) });
+      this.clients.set(cacheKey, client);
+    }
+    return client;
   }
 
   private buildClient(): OpenAI | null {
-    const { baseUrl, apiKey } = this.resolveConnection();
-    const cacheKey = `${apiKey}\n${baseUrl}`;
-    if (this.client && this.clientCacheKey === cacheKey) return this.client;
-    this.clientCacheKey = cacheKey;
-    this.client = apiKey
-      ? new OpenAI({
-          apiKey,
-          ...(baseUrl ? { baseURL: baseUrl } : {}),
-        })
-      : null;
-    return this.client;
+    return this.clientFor(this.modelSettings.getActiveConnection());
   }
 
   /** 运营侧可修改的 AI 人设指令（从 data/ai-persona.txt 加载） */
@@ -146,19 +139,21 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
   async buildReply(params: BuildReplyParams, onDelta?: ReplyDeltaHandler): Promise<ReplyResult> {
     const { message, history, matchedFaqs, intent, handoff, inquiry, ticket } = params;
+    // 本次回复使用的模型：工作台设置的默认模型（整次回复内保持一致）
+    const conn = this.modelSettings.getActiveConnection();
     const fallback = this.buildFallbackReply(matchedFaqs, handoff, inquiry, ticket, intent, message);
     const fallbackResult: ReplyResult = {
       text: fallback,
       ai: {
-        provider: this.provider,
-        model: this.getActiveModel(),
+        provider: conn.provider,
+        model: conn.model,
         used: false,
         fallback: true,
         error: null,
       },
     };
 
-    const activeClient = this.getActiveClient();
+    const activeClient = appConfig.aiFeatureEnabled ? this.clientFor(conn) : null;
 
     if (!activeClient) {
       return {
@@ -204,7 +199,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         // 流式：增量转发给调用方，同时拼出完整文本
         const stream = await activeClient.chat.completions.create(
           {
-            model: this.getActiveModel(),
+            model: conn.model,
             stream: true,
             messages: [
               { role: 'system', content: this.instructions },
@@ -225,7 +220,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       } else {
         const completion = await activeClient.chat.completions.create(
           {
-            model: this.getActiveModel(),
+            model: conn.model,
             messages: [
               { role: 'system', content: this.instructions },
               { role: 'user', content: prompt },
@@ -239,8 +234,8 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       return {
         text: text || fallback,
         ai: {
-          provider: this.provider,
-          model: this.getActiveModel(),
+          provider: conn.provider,
+          model: conn.model,
           used: Boolean(text),
           fallback: !text,
           error: null,
@@ -255,7 +250,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`AI 流式中断，保留已输出内容：${formattedError}`);
         return {
           text: partial,
-          ai: { provider: this.provider, model: this.getActiveModel(), used: true, fallback: false, error: formattedError },
+          ai: { provider: conn.provider, model: conn.model, used: true, fallback: false, error: formattedError },
         };
       }
       this.logger.warn(`AI 请求失败，降级为本地规则：${formattedError}`);

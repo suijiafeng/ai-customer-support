@@ -1,29 +1,154 @@
 import fs from 'node:fs/promises';
 import { watch, type FSWatcher } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { appConfig, AI_PROVIDER_PRESETS } from '../config.js';
 
-/** 模型运营设置（data/model-settings.json）：默认厂商/模型 + 各厂商启用开关。 */
+/** 一条模型配置：厂商预设 + 可覆盖的接口地址 / 模型 ID / 专属 Key。 */
+export interface ModelEntry {
+  id: string;
+  /** 展示名（工作台列表里看到的名字） */
+  name: string;
+  /** 厂商预设 key（AI_PROVIDER_PRESETS） */
+  provider: string;
+  /** 接口地址；空串 = 跟随厂商预设（与环境变量厂商一致时跟随 AI_BASE_URL） */
+  baseUrl: string;
+  /** 模型 ID，如 deepseek-chat */
+  model: string;
+  /** 专属 API Key；空串 = 回退环境变量。只写不读，接口永不回传明文 */
+  apiKey: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 模型设置文件（data/model-settings.json）v2：模型列表 + 默认模型。 */
 export interface ModelSettings {
-  defaultProvider: string;
-  defaultModel: string;
-  /** 缺省 key 视为启用；false 为手动关闭。 */
-  enabled: Record<string, boolean>;
+  version: 2;
+  defaultId: string;
+  models: ModelEntry[];
+}
+
+export interface ModelInput {
+  name?: unknown;
+  provider?: unknown;
+  baseUrl?: unknown;
+  model?: unknown;
+  apiKey?: unknown;
+  /** true 时清空专属 Key，回退环境变量 */
+  clearApiKey?: unknown;
+  enabled?: unknown;
+}
+
+/** 生效中的连接参数（AiService 用）。 */
+export interface ActiveConnection {
+  id: string;
+  provider: string;
+  model: string;
+  baseUrl: string;
+  apiKey: string;
+}
+
+/** 预留的默认模型：首次启动 / 旧格式迁移时保证列表里有一条 DeepSeek。 */
+export const RESERVED_DEEPSEEK_ID = 'deepseek';
+
+export class ModelSettingsError extends Error {}
+
+const NAME_MAX = 40;
+const MODEL_MAX = 128;
+const URL_MAX = 300;
+const KEY_MAX = 300;
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function newId(): string {
+  return 'mdl_' + randomBytes(5).toString('hex');
+}
+
+function str(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+function reservedDeepSeek(model?: string): ModelEntry {
+  const t = nowIso();
+  return {
+    id: RESERVED_DEEPSEEK_ID,
+    name: 'DeepSeek',
+    provider: 'deepseek',
+    baseUrl: '',
+    model: model || AI_PROVIDER_PRESETS.deepseek.model,
+    apiKey: '',
+    enabled: true,
+    createdAt: t,
+    updatedAt: t,
+  };
+}
+
+/** 环境变量推导的模型（AI_PROVIDER / AI_MODEL），非 DeepSeek 时与预留项并存并作为默认，保持老部署行为。 */
+function envEntry(provider: string, model: string): ModelEntry {
+  const t = nowIso();
+  return {
+    id: provider === 'deepseek' ? RESERVED_DEEPSEEK_ID : newId(),
+    name: AI_PROVIDER_PRESETS[provider]?.label || provider,
+    provider: AI_PROVIDER_PRESETS[provider] ? provider : 'custom',
+    baseUrl: '',
+    model,
+    apiKey: '',
+    enabled: true,
+    createdAt: t,
+    updatedAt: t,
+  };
+}
+
+/** 无文件或旧格式（v1：defaultProvider/defaultModel/enabled）时的初始列表。 */
+function seedSettings(defaultProvider: string, defaultModel: string): ModelSettings {
+  if (defaultProvider === 'deepseek' || !AI_PROVIDER_PRESETS[defaultProvider]) {
+    const ds = reservedDeepSeek(defaultProvider === 'deepseek' ? defaultModel : undefined);
+    return { version: 2, defaultId: ds.id, models: [ds] };
+  }
+  const env = envEntry(defaultProvider, defaultModel);
+  return { version: 2, defaultId: env.id, models: [reservedDeepSeek(), env] };
+}
+
+/** 某厂商的 Key 是否已配置（环境变量层面）：优先厂商专属变量，回退 AI_API_KEY；keyOptional 的本地服务视为已配置。 */
+export function isProviderKeyConfigured(providerKey: string): boolean {
+  const preset = AI_PROVIDER_PRESETS[providerKey];
+  if (!preset) return false;
+  if (preset.keyOptional) return true;
+  const vendorVar = `${providerKey.toUpperCase()}_API_KEY`;
+  return Boolean(process.env[vendorVar] || process.env.AI_API_KEY);
+}
+
+/** 环境变量里该厂商可用的 Key（厂商专属变量优先，再回退全局 AI Key）。 */
+function envKeyFor(provider: string): string {
+  const vendorVar = `${provider.toUpperCase()}_API_KEY`;
+  return process.env[vendorVar] || appConfig.aiApiKey || '';
+}
+
+/** Key 来源：custom=本条专属；env=环境变量；optional=本地服务无需 Key；none=未配置 */
+export function keySourceOf(entry: ModelEntry): 'custom' | 'env' | 'optional' | 'none' {
+  if (entry.apiKey) return 'custom';
+  if (AI_PROVIDER_PRESETS[entry.provider]?.keyOptional) return 'optional';
+  return isProviderKeyConfigured(entry.provider) ? 'env' : 'none';
+}
+
+/** 脱敏展示：只露末 4 位 */
+export function maskKey(key: string): string | null {
+  if (!key) return null;
+  return '••••' + key.slice(-4);
 }
 
 /**
- * 模型设置服务：文件缺失时回退到环境变量推导值（行为与原来一致），
- * 工作台修改后写文件 + 热更新，AiService 实时跟随。
+ * 模型设置服务：工作台增删改查模型配置，写文件 + 热更新，AiService 实时跟随默认模型。
+ * 约束：至少保留一个模型；默认模型不可删除、不可停用。
  */
 @Injectable()
 export class ModelSettingsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ModelSettingsService.name);
-  private settings: ModelSettings = {
-    defaultProvider: appConfig.aiProvider,
-    defaultModel: appConfig.aiModel,
-    enabled: {},
-  };
+  private settings: ModelSettings = seedSettings(appConfig.aiProvider, appConfig.aiModel);
   private watcher: FSWatcher | null = null;
   private reloadTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -52,40 +177,52 @@ export class ModelSettingsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 文件缺失/损坏时回退 env 推导值并告警，不阻断启动。 */
+  /** 文件缺失 → 预置 DeepSeek（+ 环境变量模型）；旧格式 → 迁移；损坏 → 告警后用预置值，不阻断启动。 */
   private async load(): Promise<void> {
     try {
       const raw = await fs.readFile(this.filePath, 'utf8');
-      const parsed = JSON.parse(raw);
-      this.settings = this.sanitize(parsed);
+      this.settings = this.sanitize(JSON.parse(raw));
     } catch (e: any) {
       if (e?.code !== 'ENOENT') {
-        this.logger.warn(`model-settings.json 读取失败，使用环境变量默认值：${e?.message || e}`);
+        this.logger.warn(`model-settings.json 读取失败，使用预置模型：${e?.message || e}`);
       }
-      this.settings = {
-        defaultProvider: appConfig.aiProvider,
-        defaultModel: appConfig.aiModel,
-        enabled: {},
-      };
+      this.settings = seedSettings(appConfig.aiProvider, appConfig.aiModel);
     }
   }
 
   private sanitize(input: any): ModelSettings {
-    const provider =
-      typeof input?.defaultProvider === 'string' && AI_PROVIDER_PRESETS[input.defaultProvider]
-        ? input.defaultProvider
-        : appConfig.aiProvider;
-    const model =
-      typeof input?.defaultModel === 'string' && input.defaultModel.trim()
-        ? input.defaultModel.trim().slice(0, 128)
-        : appConfig.aiModel;
-    const enabled: Record<string, boolean> = {};
-    if (input?.enabled && typeof input.enabled === 'object') {
-      for (const [k, v] of Object.entries(input.enabled)) {
-        if (AI_PROVIDER_PRESETS[k]) enabled[k] = Boolean(v);
-      }
+    // 旧格式 v1：{ defaultProvider, defaultModel, enabled } → 迁移为列表
+    if (!Array.isArray(input?.models)) {
+      const provider = typeof input?.defaultProvider === 'string' ? input.defaultProvider : appConfig.aiProvider;
+      const model = str(input?.defaultModel) || appConfig.aiModel;
+      return seedSettings(provider, model.slice(0, MODEL_MAX));
     }
-    return { defaultProvider: provider, defaultModel: model, enabled };
+    const seen = new Set<string>();
+    const models: ModelEntry[] = [];
+    for (const m of input.models) {
+      const id = str(m?.id);
+      const provider = str(m?.provider);
+      const model = str(m?.model);
+      if (!id || seen.has(id) || !AI_PROVIDER_PRESETS[provider] || !model) continue;
+      seen.add(id);
+      models.push({
+        id,
+        name: str(m?.name).slice(0, NAME_MAX) || AI_PROVIDER_PRESETS[provider].label,
+        provider,
+        baseUrl: str(m?.baseUrl).slice(0, URL_MAX),
+        model: model.slice(0, MODEL_MAX),
+        apiKey: str(m?.apiKey).slice(0, KEY_MAX),
+        enabled: m?.enabled !== false,
+        createdAt: str(m?.createdAt) || nowIso(),
+        updatedAt: str(m?.updatedAt) || nowIso(),
+      });
+    }
+    if (!models.length) return seedSettings(appConfig.aiProvider, appConfig.aiModel);
+    let def = models.find((m) => m.id === str(input?.defaultId));
+    if (!def) def = models.find((m) => m.enabled) || models[0];
+    // 默认模型必须启用
+    def.enabled = true;
+    return { version: 2, defaultId: def.id, models };
   }
 
   private watchFile(): void {
@@ -98,66 +235,148 @@ export class ModelSettingsService implements OnModuleInit, OnModuleDestroy {
         }, 500);
       });
     } catch {
-      // 文件不存在时 watch 会抛错；下次写入后由 updateSettings 直接更新内存
+      // 文件不存在时 watch 会抛错；之后由写操作直接更新内存
     }
   }
 
+  private async persist(): Promise<void> {
+    await fs.mkdir(this.dataDir, { recursive: true });
+    await fs.writeFile(this.filePath, JSON.stringify(this.settings, null, 2) + '\n', 'utf8');
+  }
+
+  // ---------- 读 ----------
+
   getSettings(): ModelSettings {
-    return { ...this.settings, enabled: { ...this.settings.enabled } };
+    return { ...this.settings, models: this.settings.models.map((m) => ({ ...m })) };
+  }
+
+  listModels(): ModelEntry[] {
+    return this.settings.models.map((m) => ({ ...m }));
+  }
+
+  getDefaultId(): string {
+    return this.settings.defaultId;
+  }
+
+  private defaultEntry(): ModelEntry {
+    return this.settings.models.find((m) => m.id === this.settings.defaultId) || this.settings.models[0];
   }
 
   getActiveProvider(): string {
-    return this.settings.defaultProvider;
+    return this.defaultEntry().provider;
   }
 
   getActiveModel(): string {
-    return this.settings.defaultModel;
+    return this.defaultEntry().model;
   }
 
-  isEnabled(providerKey: string): boolean {
-    return this.settings.enabled[providerKey] !== false;
+  /** 默认模型的连接参数：接口地址 / Key 留空时回退厂商预设与环境变量。 */
+  getActiveConnection(): ActiveConnection {
+    const e = this.defaultEntry();
+    const preset = AI_PROVIDER_PRESETS[e.provider];
+    const baseUrl =
+      e.baseUrl || (e.provider === appConfig.aiProvider ? appConfig.aiBaseUrl : '') || preset?.baseUrl || '';
+    const apiKey = e.apiKey || envKeyFor(e.provider) || (preset?.keyOptional ? 'local' : '');
+    return { id: e.id, provider: e.provider, model: e.model, baseUrl, apiKey };
   }
 
-  /** 运营修改：校验后写文件并立即生效。 */
-  async updateSettings(patch: any): Promise<ModelSettings> {
-    const next: any = { ...this.settings };
-    if (patch?.defaultProvider !== undefined) {
-      const p = String(patch.defaultProvider);
-      if (!AI_PROVIDER_PRESETS[p]) throw new Error(`未知的厂商：${p}`);
-      next.defaultProvider = p;
-      // 换厂商时若未显式指定模型，跟随该厂商预设默认模型
-      if (patch?.defaultModel === undefined) {
-        next.defaultModel = AI_PROVIDER_PRESETS[p].model;
-      }
-    }
-    if (patch?.defaultModel !== undefined) {
-      const m = String(patch.defaultModel).trim();
-      if (!m) throw new Error('defaultModel 不能为空');
-      if (m.length > 128) throw new Error('defaultModel 过长');
-      next.defaultModel = m;
-    }
-    if (patch?.enabled !== undefined) {
-      if (typeof patch.enabled !== 'object' || patch.enabled === null || Array.isArray(patch.enabled)) {
-        throw new Error('enabled 必须是对象');
-      }
-      const enabled: Record<string, boolean> = {};
-      for (const [k, v] of Object.entries(patch.enabled)) {
-        if (!AI_PROVIDER_PRESETS[k]) throw new Error(`未知的厂商：${k}`);
-        enabled[k] = Boolean(v);
-      }
-      next.enabled = enabled;
-    }
-    this.settings = this.sanitize(next);
-    await fs.writeFile(this.filePath, JSON.stringify(this.settings, null, 2) + '\n', 'utf8');
-    return this.getSettings();
-  }
-}
+  // ---------- 写 ----------
 
-/** 某厂商的 Key 是否已配置：优先厂商专属变量，回退 AI_API_KEY；keyOptional 的本地服务视为已配置。 */
-export function isProviderKeyConfigured(providerKey: string): boolean {
-  const preset = AI_PROVIDER_PRESETS[providerKey];
-  if (!preset) return false;
-  if (preset.keyOptional) return true;
-  const vendorVar = `${providerKey.toUpperCase()}_API_KEY`;
-  return Boolean(process.env[vendorVar] || process.env.AI_API_KEY);
+  private find(id: string): ModelEntry {
+    const m = this.settings.models.find((x) => x.id === id);
+    if (!m) throw new ModelSettingsError('模型不存在');
+    return m;
+  }
+
+  /** 校验并合并字段；create 时 provider/model 必填，其余字段按预设补齐。 */
+  private applyInput(target: ModelEntry, input: ModelInput, creating: boolean): void {
+    if (input.provider !== undefined || creating) {
+      const p = str(input.provider);
+      if (!AI_PROVIDER_PRESETS[p]) throw new ModelSettingsError(`未知的厂商：${p || '（空）'}`);
+      target.provider = p;
+    }
+    if (input.model !== undefined || creating) {
+      const m = str(input.model) || (creating ? AI_PROVIDER_PRESETS[target.provider].model : '');
+      if (!m) throw new ModelSettingsError('模型 ID 不能为空');
+      if (m.length > MODEL_MAX) throw new ModelSettingsError('模型 ID 过长');
+      target.model = m;
+    }
+    if (input.name !== undefined || creating) {
+      const n = str(input.name) || AI_PROVIDER_PRESETS[target.provider].label;
+      if (n.length > NAME_MAX) throw new ModelSettingsError(`名称不能超过 ${NAME_MAX} 个字`);
+      target.name = n;
+    }
+    if (input.baseUrl !== undefined) {
+      const u = str(input.baseUrl);
+      if (u) {
+        if (u.length > URL_MAX) throw new ModelSettingsError('接口地址过长');
+        let parsed: URL;
+        try { parsed = new URL(u); } catch { throw new ModelSettingsError('接口地址格式不正确'); }
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          throw new ModelSettingsError('接口地址只支持 http / https');
+        }
+      }
+      target.baseUrl = u;
+    }
+    // 自定义厂商没有预设地址，必须自己填
+    if (target.provider === 'custom' && !target.baseUrl) {
+      throw new ModelSettingsError('自定义厂商需要填写接口地址');
+    }
+    if (input.clearApiKey === true) {
+      target.apiKey = '';
+    } else if (input.apiKey !== undefined) {
+      const k = str(input.apiKey);
+      if (k.length > KEY_MAX) throw new ModelSettingsError('API Key 过长');
+      // 空串表示「不修改」：编辑时 Key 输入框默认为空，避免误清掉已有 Key
+      if (k) target.apiKey = k;
+    }
+    if (input.enabled !== undefined) {
+      target.enabled = Boolean(input.enabled);
+    }
+  }
+
+  async createModel(input: ModelInput): Promise<ModelEntry> {
+    const t = nowIso();
+    const entry: ModelEntry = {
+      id: newId(), name: '', provider: '', baseUrl: '', model: '', apiKey: '',
+      enabled: true, createdAt: t, updatedAt: t,
+    };
+    this.applyInput(entry, input, true);
+    this.settings.models.push(entry);
+    await this.persist();
+    return { ...entry };
+  }
+
+  async updateModel(id: string, input: ModelInput): Promise<ModelEntry> {
+    const current = this.find(id);
+    const next = { ...current };
+    this.applyInput(next, input, false);
+    if (id === this.settings.defaultId && !next.enabled) {
+      throw new ModelSettingsError('默认模型不能停用，请先将其他模型设为默认');
+    }
+    next.updatedAt = nowIso();
+    Object.assign(current, next);
+    await this.persist();
+    return { ...current };
+  }
+
+  async deleteModel(id: string): Promise<void> {
+    this.find(id);
+    if (this.settings.models.length <= 1) {
+      throw new ModelSettingsError('至少需要保留一个模型，无法删除');
+    }
+    if (id === this.settings.defaultId) {
+      throw new ModelSettingsError('默认模型不能删除，请先将其他模型设为默认');
+    }
+    this.settings.models = this.settings.models.filter((m) => m.id !== id);
+    await this.persist();
+  }
+
+  async setDefault(id: string): Promise<ModelEntry> {
+    const m = this.find(id);
+    if (!m.enabled) throw new ModelSettingsError('请先启用该模型，再设为默认');
+    this.settings.defaultId = id;
+    await this.persist();
+    return { ...m };
+  }
 }

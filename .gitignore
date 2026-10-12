@@ -27,5 +27,8 @@ vite.config.js.timestamp-*.mjs
 # 自动生成并持久化的 JWT 签名密钥（未显式配置 AUTH_SECRET 时）
 .auth_secret
 
+# 工作台维护的模型配置：可能含各模型的专属 API Key
+apps/server/data/model-settings.json
+
 .claude/
 .env

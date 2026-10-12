@@ -623,6 +623,9 @@ button.loading::before {
   background: transparent;
 }
 .ticket-table-wrap td .ghost-btn.remove:hover { background: #fef2f2; color: #b42318; }
+.ghost-btn:disabled, .ghost-btn:disabled:hover,
+.ticket-table-wrap td .ghost-btn:disabled, .ticket-table-wrap td .ghost-btn:disabled:hover {
+  opacity: .4; cursor: not-allowed; background: transparent; }
 /* 无边框后按钮之间靠得太近，补一点间距 */
 .ticket-table .ops { gap: 2px; }
 /* ---- 工单表格 ---- */
@@ -1095,14 +1098,17 @@ button.loading::before {
   border: 1px solid #e6e7ea; border-radius: 12px; padding: 14px 18px; font-size: 14px; margin-bottom: 16px; }
 .active-dot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e;
   box-shadow: 0 0 0 4px rgba(34,197,94,.15); }
-.vendor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-.vendor-card { background: #fff; border: 1px solid #e6e7ea; border-radius: 12px; padding: 18px; }
-.vendor-card.is-active { border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,.1); }
-.vendor-card.is-off { opacity: .65; }
-.vendor-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.vendor-head h3 { margin: 0; font-size: 16px; }
-.vendor-meta { display: flex; gap: 8px; margin-bottom: 12px; }
-.vendor-model { margin-bottom: 12px; }
+/* 模型表格：列少于跟进事项，收窄最小宽度与操作列 */
+.ticket-table.model-table { min-width: 960px; font-size: 14px; }
+.ticket-table.model-table th:last-child,
+.ticket-table.model-table td:last-child { width: 220px; min-width: 220px; }
+.model-table tr.is-inactive td:not(:last-child) { opacity: .55; }
+.model-name { font-weight: 600; color: var(--ink); margin-right: 6px; }
+.model-url .mono { display: inline-block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.model-key { margin-left: 6px; font-size: 12px; }
+.model-rules { margin: 10px 2px 0; }
+.check-row { display: flex; align-items: center; gap: 8px; margin: -4px 0 12px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+.form-field input:disabled { background: var(--surface-muted); color: var(--ink-4); }
 /* 按钮式开关（模型管理）；限定 button，避免覆盖租户弹窗里 label 式的 .switch */
 button.switch { width: 40px; height: 22px; border-radius: 11px; border: 0; background: #d0d3d7; cursor: pointer;
   position: relative; transition: background .15s; padding: 0; }
