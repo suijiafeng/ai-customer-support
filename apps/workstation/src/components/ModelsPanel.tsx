@@ -15,6 +15,8 @@ interface ModelRow {
   model: string;
   enabled: boolean;
   isDefault: boolean;
+  /** 指定使用该模型的租户名 */
+  tenants: string[];
   keySource: KeySource;
   keyMasked: string | null;
   updatedAt: string;
@@ -72,7 +74,9 @@ export default function ModelsPanel() {
   const load = useCallback(async () => {
     setError(false);
     try {
-      setData(await requestJson<ModelsData>('/api/admin/models'));
+      const res = await requestJson<ModelsData>('/api/admin/models');
+      // 兼容旧版后端：缺少 tenants 字段时按「无租户占用」处理
+      setData({ ...res, models: (res.models || []).map((m) => ({ ...m, tenants: m.tenants || [] })) });
     } catch {
       setError(true);
     } finally {
@@ -232,12 +236,21 @@ export default function ModelsPanel() {
               {data.models.map((m) => {
                 const busy = busyId === m.id;
                 const keyTag = KEY_TAG[m.keySource];
-                const deleteBlock = onlyOne ? '至少需要保留一个模型' : m.isDefault ? '默认模型不能删除，请先将其他模型设为默认' : '';
+                const deleteBlock = onlyOne
+                  ? '至少需要保留一个模型'
+                  : m.isDefault
+                    ? '默认模型不能删除，请先将其他模型设为默认'
+                    : m.tenants.length
+                      ? `正被 ${m.tenants.length} 个租户使用（${m.tenants.slice(0, 3).join('、')}${m.tenants.length > 3 ? ' 等' : ''}），请先在租户管理中更换`
+                      : '';
                 return (
                   <tr key={m.id} className={m.enabled ? '' : 'is-inactive'}>
                     <td>
                       <span className="model-name">{m.name}</span>
                       {m.isDefault && <span className="tag tag-brand">默认</span>}
+                      {m.tenants.length > 0 && (
+                        <div className="model-tenants" title={m.tenants.join('、')}>{m.tenants.length} 个租户指定使用</div>
+                      )}
                     </td>
                     <td>{m.providerLabel}</td>
                     <td><code className="mono">{m.model}</code></td>
@@ -297,7 +310,7 @@ export default function ModelsPanel() {
           </table>
         </div>
         <p className="form-hint model-rules">
-          规则：至少保留一个模型；默认模型不能删除或停用。API Key 留空时使用服务端环境变量（<code className="mono">&lt;厂商&gt;_API_KEY</code> 或 <code className="mono">AI_API_KEY</code>）。
+          规则：至少保留一个模型；默认模型不能删除或停用；被租户指定的模型需先在租户管理中更换才能删除（停用后这些租户自动回退默认模型）。API Key 留空时使用服务端环境变量（<code className="mono">&lt;厂商&gt;_API_KEY</code> 或 <code className="mono">AI_API_KEY</code>）。
         </p>
       </section>
 

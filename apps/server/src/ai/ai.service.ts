@@ -17,6 +17,8 @@ export interface BuildReplyParams {
   handoff: HandoffDecision;
   inquiry: Inquiry | null;
   ticket: Ticket | null;
+  /** 租户指定的模型 ID；空 / 不可用时用默认模型 */
+  modelId?: string | null;
 }
 
 export interface ReplyResult {
@@ -42,7 +44,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * OpenAI 兼容客户端：延迟构建 + 按连接参数（Key + 地址）缓存。
-   * 切换默认模型 / 修改模型配置后，下次调用自动使用新参数，无需重启。
+   * 租户可指定不同模型，所以同时可能存在多个客户端；改了模型配置后下次调用自动用新参数。
    */
   private readonly clients = new Map<string, OpenAI>();
 
@@ -139,8 +141,8 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
   async buildReply(params: BuildReplyParams, onDelta?: ReplyDeltaHandler): Promise<ReplyResult> {
     const { message, history, matchedFaqs, intent, handoff, inquiry, ticket } = params;
-    // 本次回复使用的模型：工作台设置的默认模型（整次回复内保持一致）
-    const conn = this.modelSettings.getActiveConnection();
+    // 本次回复使用的模型：租户专属优先，不可用时回退默认（整次回复内保持一致）
+    const conn = this.modelSettings.getConnectionFor(params.modelId);
     const fallback = this.buildFallbackReply(matchedFaqs, handoff, inquiry, ticket, intent, message);
     const fallbackResult: ReplyResult = {
       text: fallback,

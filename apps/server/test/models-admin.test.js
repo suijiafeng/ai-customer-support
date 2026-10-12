@@ -173,3 +173,17 @@ test('isProviderKeyConfigured：厂商专属变量优先，回退 AI_API_KEY', a
     Object.assign(process.env, saved);
   }
 });
+
+test('租户专属模型连接：可用时使用，停用/不存在时回退默认', async () => {
+  const { svc, dir } = await makeService(null);
+  try {
+    const q = await svc.createModel({ provider: 'qwen', model: 'qwen-max' });
+    assert.equal(svc.getConnectionFor(q.id).model, 'qwen-max');
+    assert.equal(svc.isUsable(q.id), true);
+    await svc.updateModel(q.id, { enabled: false });
+    assert.equal(svc.isUsable(q.id), false);
+    assert.equal(svc.getConnectionFor(q.id).id, svc.getDefaultId());
+    assert.equal(svc.getConnectionFor('mdl_missing').id, svc.getDefaultId());
+    assert.equal(svc.getConnectionFor(null).id, svc.getDefaultId());
+  } finally { await teardown(svc, dir); }
+});

@@ -59,6 +59,49 @@ async function copyText(text: string): Promise<boolean> {
 }
 
 /** 租户管理：admin 专属。支持名称/ID 搜索、分页；弹窗创建；密钥脱敏显示、点击复制。 */
+/** 模型管理里的模型（租户指定 AI 模型用） */
+interface ModelOption {
+  id: string;
+  name: string;
+  model: string;
+  enabled: boolean;
+  isDefault: boolean;
+}
+
+/** 租户当前实际使用的模型说明：未指定 / 指定可用 / 指定但不可用（回退默认） */
+function tenantModelInfo(modelId: string | null | undefined, models: ModelOption[]) {
+  const def = models.find((m) => m.isDefault);
+  if (!modelId) return { label: '跟随默认', detail: def ? `${def.name} · ${def.model}` : '', fallback: false, custom: false };
+  const m = models.find((x) => x.id === modelId);
+  if (!m || !m.enabled) {
+    return { label: m ? `${m.name}（已停用）` : '模型已删除', detail: def ? `已回退默认：${def.name}` : '', fallback: true, custom: true };
+  }
+  return { label: m.name, detail: m.model, fallback: false, custom: true };
+}
+
+/** AI 模型下拉：空值 = 跟随默认；当前值不可用时仍保留该选项，避免编辑时被悄悄清掉 */
+function ModelSelect({
+  id, value, onChange, models,
+}: { id: string; value: string; onChange: (v: string) => void; models: ModelOption[] }) {
+  const def = models.find((m) => m.isDefault);
+  const usable = models.filter((m) => m.enabled);
+  const current = value ? models.find((m) => m.id === value) : undefined;
+  const staleValue = value && (!current || !current.enabled);
+  return (
+    <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">跟随默认模型{def ? `（${def.name} · ${def.model}）` : ''}</option>
+      {usable.map((m) => (
+        <option key={m.id} value={m.id}>{m.name} · {m.model}{m.isDefault ? '（默认）' : ''}</option>
+      ))}
+      {staleValue && (
+        <option value={value} disabled>
+          {current ? `${current.name}（已停用，当前回退默认）` : '原模型已删除（当前回退默认）'}
+        </option>
+      )}
+    </select>
+  );
+}
+
 export default function TenantsPanel() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,12 +111,18 @@ export default function TenantsPanel() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [viewing, setViewing] = useState<Tenant | null>(null);
+  const [models, setModels] = useState<ModelOption[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
-      const data = await requestJson<{ keys: Tenant[] }>('/api/widget-keys');
+      const [data, modelData] = await Promise.all([
+        requestJson<{ keys: Tenant[] }>('/api/widget-keys'),
+        // 模型列表加载失败不影响租户列表（只是无法显示/选择模型）
+        requestJson<{ models: ModelOption[] }>('/api/admin/models').catch(() => ({ models: [] as ModelOption[] })),
+      ]);
+      setModels(modelData.models || []);
       // 最新创建的排在最前
       const sorted = (data.keys || []).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       setTenants(sorted);
@@ -175,7 +224,7 @@ export default function TenantsPanel() {
             <table className="ticket-table tenant-table">
               <thead>
                 <tr>
-                  <th>租户名称</th><th>租户ID</th><th>状态</th><th>创建时间</th><th>租户域名</th><th>备注</th><th>租户密钥</th><th>操作</th>
+                  <th>租户名称</th><th>租户ID</th><th>状态</th><th>AI 模型</th><th>创建时间</th><th>租户域名</th><th>备注</th><th>租户密钥</th><th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -184,6 +233,18 @@ export default function TenantsPanel() {
                     <td>{t.name || '—'}</td>
                     <td className="mono">{t.id || '—'}</td>
                     <td><span className={`tag tag-${t.active ? 'success' : 'info'}`}>{t.active ? '启用中' : '已停用'}</span></td>
+                    <td>
+                      {(() => {
+                        const info = tenantModelInfo(t.modelId, models);
+                        return (
+                          <span className="tenant-model" title={info.detail || undefined}>
+                            {info.fallback
+                              ? <span className="tag tag-warning">{info.label}</span>
+                              : info.custom ? <b>{info.label}</b> : <span className="muted">{info.label}</span>}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="mono">{fmtDate(t.createdAt)}</td>
                     <td className="mono domain" title={t.domain || undefined}>{t.domain || <span className="muted">—</span>}</td>
                     <td className="remark" title={t.remark || undefined}>{t.remark || <span className="muted">—</span>}</td>
@@ -221,8 +282,8 @@ export default function TenantsPanel() {
         </>
       )}
 
-      {showCreate && <CreateTenantModal onClose={() => setShowCreate(false)} onCreated={onCreated} />}
-      {editing && <EditTenantModal tenant={editing} onClose={() => setEditing(null)} onUpdated={onUpdated} />}
+      {showCreate && <CreateTenantModal models={models} onClose={() => setShowCreate(false)} onCreated={onCreated} />}
+      {editing && <EditTenantModal tenant={editing} models={models} onClose={() => setEditing(null)} onUpdated={onUpdated} />}
       {viewing && <TenantStatsModal tenant={viewing} onClose={() => setViewing(null)} />}
     </main>
   );
@@ -230,9 +291,10 @@ export default function TenantsPanel() {
 
 /** 编辑租户弹窗：名称 / 域名 / 备注可改，启用状态用 switch 切换，保存时一并提交。 */
 function EditTenantModal({
-  tenant, onClose, onUpdated,
+  tenant, models, onClose, onUpdated,
 }: {
   tenant: Tenant;
+  models: ModelOption[];
   onClose: () => void;
   onUpdated: (t: Tenant) => void;
 }) {
@@ -240,6 +302,7 @@ function EditTenantModal({
   const [domain, setDomain] = useState(tenant.domain || '');
   const [remark, setRemark] = useState(tenant.remark || '');
   const [active, setActive] = useState(tenant.active);
+  const [modelId, setModelId] = useState(tenant.modelId || '');
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
@@ -250,11 +313,15 @@ function EditTenantModal({
       const data = await requestJson<{ key: Tenant }>(`/api/widget-keys/${encodeURIComponent(tenant.key)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: value, domain: domain.trim(), remark: remark.trim(), active }),
+        body: JSON.stringify({
+          name: value, domain: domain.trim(), remark: remark.trim(), active,
+          // 未改动时不提交：原模型已停用/删除时，避免因为校验失败而无法保存其他字段
+          ...(modelId !== (tenant.modelId || '') ? { modelId } : {}),
+        }),
       });
       onUpdated(data.key);
-    } catch {
-      showToast('保存失败，请重试', 'error');
+    } catch (err: any) {
+      showToast(err?.message ? `保存失败：${err.message}` : '保存失败，请重试', 'error');
       setSaving(false);
     }
   };
@@ -283,6 +350,10 @@ function EditTenantModal({
             onChange={(e) => setDomain(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit(); }}
           />
+        </div>
+        <div className="field">
+          <label htmlFor="edit-tenant-model">AI 模型</label>
+          <ModelSelect id="edit-tenant-model" value={modelId} onChange={setModelId} models={models} />
         </div>
         <div className="field">
           <label htmlFor="edit-tenant-remark">备注</label>
@@ -328,10 +399,11 @@ function EditTenantModal({
 }
 
 /** 新建租户弹窗：租户名称必填、域名/备注可选；ID 与密钥由服务端自动生成。 */
-function CreateTenantModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function CreateTenantModal({ models, onClose, onCreated }: { models: ModelOption[]; onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState('');
   const [domain, setDomain] = useState('');
   const [remark, setRemark] = useState('');
+  const [modelId, setModelId] = useState('');
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
@@ -345,7 +417,7 @@ function CreateTenantModal({ onClose, onCreated }: { onClose: () => void; onCrea
         body: JSON.stringify(body),
       });
     try {
-      await post({ name: value, domain: domain.trim(), remark: remark.trim() });
+      await post({ name: value, domain: domain.trim(), remark: remark.trim(), modelId });
       onCreated();
     } catch (err: any) {
       // 旧版后端要求前端传 key：用相同算法在前端生成后重试
@@ -390,6 +462,10 @@ function CreateTenantModal({ onClose, onCreated }: { onClose: () => void; onCrea
             onChange={(e) => setDomain(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit(); }}
           />
+        </div>
+        <div className="field">
+          <label htmlFor="tenant-model">AI 模型</label>
+          <ModelSelect id="tenant-model" value={modelId} onChange={setModelId} models={models} />
         </div>
         <div className="field">
           <label htmlFor="tenant-remark">备注</label>

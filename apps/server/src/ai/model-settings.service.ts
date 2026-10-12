@@ -270,9 +270,27 @@ export class ModelSettingsService implements OnModuleInit, OnModuleDestroy {
     return this.defaultEntry().model;
   }
 
-  /** 默认模型的连接参数：接口地址 / Key 留空时回退厂商预设与环境变量。 */
+  /** 模型是否存在且启用（租户指定模型时校验用） */
+  isUsable(id: string): boolean {
+    return this.settings.models.some((m) => m.id === id && m.enabled);
+  }
+
+  hasModel(id: string): boolean {
+    return this.settings.models.some((m) => m.id === id);
+  }
+
+  /** 默认模型的连接参数 */
   getActiveConnection(): ActiveConnection {
-    const e = this.defaultEntry();
+    return this.getConnectionFor(null);
+  }
+
+  /**
+   * 指定模型的连接参数（租户专属模型）；模型不存在或已停用时回退默认模型，保证回复不中断。
+   * 接口地址 / Key 留空时回退厂商预设与环境变量。
+   */
+  getConnectionFor(id?: string | null): ActiveConnection {
+    const picked = id ? this.settings.models.find((m) => m.id === id && m.enabled) : undefined;
+    const e = picked || this.defaultEntry();
     const preset = AI_PROVIDER_PRESETS[e.provider];
     const baseUrl =
       e.baseUrl || (e.provider === appConfig.aiProvider ? appConfig.aiBaseUrl : '') || preset?.baseUrl || '';

@@ -16,6 +16,7 @@ import { appConfig } from '../config.js';
 import { SessionsService } from '../sessions/sessions.service.js';
 import { TicketsService } from '../tickets/tickets.service.js';
 import { SessionTicketService } from '../workflow/session-ticket.service.js';
+import { WidgetKeysService } from '../widget-keys/widget-keys.service.js';
 
 @Injectable()
 export class ChatService {
@@ -24,7 +25,8 @@ export class ChatService {
     private readonly knowledge: KnowledgeService,
     private readonly sessions: SessionsService,
     private readonly tickets: TicketsService,
-    private readonly sessionTicket: SessionTicketService
+    private readonly sessionTicket: SessionTicketService,
+    private readonly widgetKeys: WidgetKeysService
   ) {}
 
   /**
@@ -237,7 +239,8 @@ export class ChatService {
     this.sessionTicket.notify(sessionId);
 
     const replyResult = await this.ai.buildReply(
-      { message, history, matchedFaqs, intent, handoff, inquiry, ticket },
+      // 租户在「租户管理」里指定了模型就用它，否则（或该模型不可用）用默认模型
+      { message, history, matchedFaqs, intent, handoff, inquiry, ticket, modelId: this.widgetKeys.get(tenantKey)?.modelId },
       onDelta
     );
     const reply = replyResult.text;

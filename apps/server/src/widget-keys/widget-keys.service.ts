@@ -33,6 +33,12 @@ function normalizeHost(value?: string | null): string {
     .split(':')[0];
 }
 
+/** 模型 ID 归一：空串 / 非字符串 → null（跟随默认模型） */
+function normalizeModelId(raw: unknown): string | null {
+  const id = typeof raw === 'string' ? raw.trim().slice(0, 64) : '';
+  return id || null;
+}
+
 export type TenantVerifyResult = 'ok' | 'invalid_site_key' | 'invalid_tenant' | 'domain_not_allowed';
 
 @Injectable()
@@ -95,7 +101,7 @@ export class WidgetKeysService implements OnModuleInit {
     return 'ok';
   }
 
-  create(rawName: string, rawKey?: string, rawRemark?: string, rawDomain?: string): Tenant {
+  create(rawName: string, rawKey?: string, rawRemark?: string, rawDomain?: string, rawModelId?: string | null): Tenant {
     const name = String(rawName || '').trim().slice(0, MAX_NAME_LENGTH);
     if (!name) throw new ConflictException({ error: 'name is required' });
     const remark = String(rawRemark || '').trim().slice(0, MAX_REMARK_LENGTH);
@@ -107,7 +113,8 @@ export class WidgetKeysService implements OnModuleInit {
       do { key = newTenantKey(); } while (this.keys.has(key));
     }
     const now = new Date().toISOString();
-    const tenant: Tenant = { id: newTenantId(), key, name, domain, remark, active: true, createdAt: now, updatedAt: now };
+    const modelId = normalizeModelId(rawModelId);
+    const tenant: Tenant = { id: newTenantId(), key, name, domain, remark, active: true, modelId, createdAt: now, updatedAt: now };
     this.keys.set(key, tenant);
     this.store.saveWidgetKey(tenant);
     return tenant;
@@ -115,7 +122,7 @@ export class WidgetKeysService implements OnModuleInit {
 
   update(
     key: string,
-    patch: { name?: string; domain?: string; remark?: string; active?: boolean }
+    patch: { name?: string; domain?: string; remark?: string; active?: boolean; modelId?: string | null }
   ): Tenant {
     const existing = this.keys.get(key);
     if (!existing) throw new NotFoundException({ error: 'widget key not found' });
@@ -128,9 +135,20 @@ export class WidgetKeysService implements OnModuleInit {
     if (patch.domain !== undefined) updated.domain = String(patch.domain || '').trim().slice(0, MAX_DOMAIN_LENGTH);
     if (patch.remark !== undefined) updated.remark = String(patch.remark || '').trim().slice(0, MAX_REMARK_LENGTH);
     if (patch.active !== undefined) updated.active = Boolean(patch.active);
+    if (patch.modelId !== undefined) updated.modelId = normalizeModelId(patch.modelId);
     this.keys.set(key, updated);
     this.store.saveWidgetKey(updated);
     return updated;
+  }
+
+  /** 按租户密钥取租户（聊天时解析租户专属模型用） */
+  get(key: string | null | undefined): Tenant | undefined {
+    return key ? this.keys.get(key) : undefined;
+  }
+
+  /** 正在使用某模型的租户（删除模型前的占用检查） */
+  listByModel(modelId: string): Tenant[] {
+    return [...this.keys.values()].filter((t) => t.modelId === modelId);
   }
 
   remove(key: string): void {

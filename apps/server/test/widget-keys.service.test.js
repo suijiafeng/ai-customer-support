@@ -195,3 +195,22 @@ test('verify：租户域名带协议/路径/端口也能归一化匹配', async 
   assert.equal(svc.verify('acme', 'tn_1234567890', 'www.acme.com'), 'ok');
   assert.equal(svc.verify('acme', 'tn_1234567890', 'acme.com'), 'domain_not_allowed');
 });
+
+test('租户指定模型：创建/更新时归一化，空值表示跟随默认模型', async () => {
+  const { svc } = await makeService([row()]);
+  const t = svc.create('带模型租户', undefined, '', '', '  mdl_abc  ');
+  assert.equal(t.modelId, 'mdl_abc');
+  assert.equal(svc.create('不指定').modelId, null);
+  assert.equal(svc.update(t.key, { modelId: '' }).modelId, null);
+  assert.equal(svc.update(t.key, { modelId: 'deepseek' }).modelId, 'deepseek');
+  // 未传 modelId 的更新不改动
+  assert.equal(svc.update(t.key, { name: '改名' }).modelId, 'deepseek');
+});
+
+test('listByModel / get：按模型查占用租户、按密钥取租户', async () => {
+  const { svc } = await makeService([row({ modelId: 'deepseek' }), row({ id: 'tn_0000000002', key: 'beta', name: 'Beta' })]);
+  assert.deepEqual(svc.listByModel('deepseek').map((t) => t.name), ['Acme']);
+  assert.equal(svc.listByModel('mdl_none').length, 0);
+  assert.equal(svc.get('beta').name, 'Beta');
+  assert.equal(svc.get(null), undefined);
+});

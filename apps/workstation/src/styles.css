@@ -682,7 +682,7 @@ button.loading::before {
 .domain { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 租户表格：列多，固定最小宽度、单元格不换行，窄屏时外层容器横向滚动 */
 /* min-width 只用来防止列挤成折行，不该主动制造横向滚动 */
-.tenant-table { min-width: 1000px; }
+.tenant-table { min-width: 1120px; }
 .tenant-table td { white-space: nowrap; }
 /* 宽表横向滚动时把「操作」列吸在右缘，否则要滚到底才能点操作按钮。
    跟进事项的操作列最多 4 个按钮，比租户表更需要 */
@@ -713,6 +713,11 @@ button.loading::before {
 .field input, .field textarea { width: 100%; border: 1px solid #d0d3d7; border-radius: 8px;
   padding: 10px 12px; font-size: 16px; outline: none; font-family: inherit; resize: vertical; }
 .field input:focus, .field textarea:focus { border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,.14); }
+.field select { width: 100%; border: 1px solid #d0d3d7; border-radius: 8px; padding: 10px 12px; font-size: 16px;
+  outline: none; font-family: inherit; background: var(--surface); color: var(--ink); }
+.field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.tenant-model { display: inline-block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.tenant-model b { font-weight: 600; color: var(--ink); }
 .field-hint { margin: 0 0 14px; font-size: 14px; color: #989a9e; }
 /* 移动端输入框统一 16px：避免 iOS Safari 聚焦时自动缩放页面 */
 @media (max-width: 640px) {
@@ -1136,3 +1141,4 @@ button.switch:disabled { opacity: .5; cursor: not-allowed; }
 .faq-answer { margin: 0; font-size: 13px; color: #6c6f72; line-height: 1.6;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .faq-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.model-tenants { margin-top: 2px; font-size: 12px; color: var(--ink-4); }

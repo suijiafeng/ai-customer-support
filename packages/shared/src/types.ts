@@ -148,6 +148,8 @@ export interface Tenant {
   key: string;
   /** 状态：启用/停用 */
   active: boolean;
+  /** 指定的 AI 模型（模型管理里的模型 ID）；空 = 跟随默认模型。指定模型停用/删除时自动回退默认 */
+  modelId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

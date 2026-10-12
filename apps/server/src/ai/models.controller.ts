@@ -5,6 +5,7 @@ import {
 import { AgentAuthGuard } from '../auth/auth.guard.js';
 import type { AuthenticatedAgent } from '../auth/auth.service.js';
 import { AI_PROVIDER_PRESETS } from '../config.js';
+import { WidgetKeysService } from '../widget-keys/widget-keys.service.js';
 import {
   ModelSettingsError, ModelSettingsService, keySourceOf, maskKey, type ModelEntry,
 } from './model-settings.service.js';
@@ -13,7 +14,10 @@ import {
 @UseGuards(AgentAuthGuard)
 @Controller('api/admin/models')
 export class ModelsController {
-  constructor(private readonly modelSettings: ModelSettingsService) {}
+  constructor(
+    private readonly modelSettings: ModelSettingsService,
+    private readonly widgetKeys: WidgetKeysService,
+  ) {}
 
   private assertAdmin(req: any): AuthenticatedAgent {
     const agent = req.agent as AuthenticatedAgent;
@@ -36,6 +40,8 @@ export class ModelsController {
       model: m.model,
       enabled: m.enabled,
       isDefault: m.id === this.modelSettings.getDefaultId(),
+      /** 指定使用该模型的租户名（删除前提示占用） */
+      tenants: this.widgetKeys.listByModel(m.id).map((t) => t.name),
       keySource: keySourceOf(m),
       keyMasked: maskKey(m.apiKey),
       createdAt: m.createdAt,
@@ -90,6 +96,13 @@ export class ModelsController {
   @Delete(':id')
   async remove(@Param('id') id: string, @Req() req: any) {
     this.assertAdmin(req);
+    const users = this.widgetKeys.listByModel(id);
+    if (users.length) {
+      const names = users.slice(0, 3).map((t) => `「${t.name}」`).join('、');
+      throw new BadRequestException({
+        error: `该模型正被 ${users.length} 个租户使用（${names}${users.length > 3 ? ' 等' : ''}），请先在租户管理中更换`,
+      });
+    }
     try {
       await this.modelSettings.deleteModel(id);
       return { ok: true };
