@@ -10,6 +10,7 @@ import OperationsPanel from './components/OperationsPanel.js';
 import TenantsPanel from './components/TenantsPanel.js';
 import ModelsPanel from './components/ModelsPanel.js';
 import UsersPanel from './components/UsersPanel.js';
+import FaqsPanel from './components/FaqsPanel.js';
 import { FeedbackHost } from './ui/feedback.js';
 import Icon from './ui/Icon.js';
 
@@ -39,10 +40,11 @@ const VIEWS: ViewDef[] = [
 
 // 数据管理下的二级子菜单；数据概览人人可见，其余管理类功能仅 admin 可见。
 // 后续新增管理功能（比如工单规则、公告管理）直接加进这个数组即可
-type SystemSubView = 'ops' | 'tenants' | 'models' | 'users';
-type SystemSubViewDef = { key: SystemSubView; label: string; icon: 'bar-chart' | 'building' | 'zap' | 'user'; adminOnly?: boolean };
+type SystemSubView = 'ops' | 'tenants' | 'models' | 'users' | 'faqs';
+type SystemSubViewDef = { key: SystemSubView; label: string; icon: 'bar-chart' | 'building' | 'zap' | 'user' | 'message-circle'; adminOnly?: boolean };
 const SYSTEM_SUB_VIEWS: SystemSubViewDef[] = [
   { key: 'ops', label: '数据概览', icon: 'bar-chart' },
+  { key: 'faqs', label: '知识库', icon: 'message-circle' },
   { key: 'tenants', label: '租户管理', icon: 'building', adminOnly: true },
   { key: 'models', label: '模型管理', icon: 'zap', adminOnly: true },
   { key: 'users', label: '用户管理', icon: 'user', adminOnly: true },
@@ -153,6 +155,7 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
             {systemSubView === 'tenants' && agent.role === 'admin' && <TenantsPanel />}
             {systemSubView === 'models' && agent.role === 'admin' && <ModelsPanel />}
             {systemSubView === 'users' && agent.role === 'admin' && <UsersPanel />}
+            {systemSubView === 'faqs' && <FaqsPanel isAdmin={agent.role === 'admin'} />}
           </div>
         )}
       </div>
