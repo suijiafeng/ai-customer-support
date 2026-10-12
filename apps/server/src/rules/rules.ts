@@ -1,8 +1,62 @@
 // 规则引擎（纯函数）。自 server/rules.js 原样平移，行为不变。
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { Faq, Inquiry, Sentiment } from '@assistflow/shared';
+import { appConfig } from '../config.js';
 
 export interface ScoredFaq extends Faq {
   score: number;
+}
+
+/** 业务词表：queryReplacements / businessTerms / outOfScopeTerms / intentKeywords，见 data/business-terms.json */
+export interface BusinessTermsConfig {
+  queryReplacements: Array<[string, string]>;
+  businessTerms: string[];
+  outOfScopeTerms: string[];
+  intentKeywords: Record<string, string[]>;
+}
+
+const EMPTY_TERMS: BusinessTermsConfig = {
+  queryReplacements: [],
+  businessTerms: [],
+  outOfScopeTerms: [],
+  intentKeywords: {},
+};
+
+/**
+ * 从 data/business-terms.json 加载业务词表；文件缺失/解析失败时用空配置降级
+ *（意图回落到 FAQ 匹配或 general，不抛错）。
+ */
+function loadBusinessTerms(): BusinessTermsConfig {
+  try {
+    const raw = readFileSync(path.join(appConfig.dataDir, 'business-terms.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    return {
+      queryReplacements: Array.isArray(parsed.queryReplacements) ? parsed.queryReplacements : [],
+      businessTerms: Array.isArray(parsed.businessTerms) ? parsed.businessTerms : [],
+      outOfScopeTerms: Array.isArray(parsed.outOfScopeTerms) ? parsed.outOfScopeTerms : [],
+      intentKeywords:
+        parsed.intentKeywords && typeof parsed.intentKeywords === 'object' ? parsed.intentKeywords : {},
+    };
+  } catch {
+    return EMPTY_TERMS;
+  }
+}
+
+const TERMS: BusinessTermsConfig = loadBusinessTerms();
+
+/** 供测试或热更新覆盖业务词表 */
+export function setBusinessTerms(terms: Partial<BusinessTermsConfig>): void {
+  Object.assign(TERMS, {
+    queryReplacements: terms.queryReplacements ?? TERMS.queryReplacements,
+    businessTerms: terms.businessTerms ?? TERMS.businessTerms,
+    outOfScopeTerms: terms.outOfScopeTerms ?? TERMS.outOfScopeTerms,
+    intentKeywords: terms.intentKeywords ?? TERMS.intentKeywords,
+  });
+}
+
+export function getBusinessTerms(): BusinessTermsConfig {
+  return TERMS;
 }
 
 export function createFaqSearcher(faqs: Faq[]) {
@@ -41,72 +95,7 @@ export function createFaqSearcher(faqs: Faq[]) {
   };
 }
 
-const QUERY_REPLACEMENTS: Array<[string, string]> = [
-  ['空档', '档期'],
-  ['有空吗', '有档期吗'],
-  ['联系人工', '联系客服'],
-  ['联系真人', '联系客户服务人员'],
-  ['人工', '客服'],
-  ['vue3', 'vue'],
-  ['nextjs', 'next.js'],
-  ['next', 'next.js'],
-  ['小页面', '落地页'],
-  ['小站', '官网'],
-];
-
-const BUSINESS_TERMS = [
-  '开发',
-  '网站',
-  '官网',
-  '页面',
-  '小程序',
-  '后台',
-  '系统',
-  '技术栈',
-  '前端',
-  '后端',
-  '报价',
-  '预算',
-  '排期',
-  '档期',
-  '合作',
-  '项目',
-  '咨询',
-  '作品集',
-  '案例',
-  'seo',
-  '部署',
-  '域名',
-];
-
-const OUT_OF_SCOPE_TERMS = [
-  '天气',
-  '双色球',
-  '彩票',
-  '股票',
-  '基金',
-  '币价',
-  '比特币',
-  '理财',
-  '算命',
-  '星座',
-  '占卜',
-  '塔罗',
-  '减肥',
-  '食谱',
-  '做饭',
-  '医生',
-  '处方',
-  '病情',
-  '法律咨询',
-  '离婚',
-  '合同纠纷',
-  '贷款',
-  '信用卡',
-  '考试答案',
-  '写作业',
-  '代写',
-];
+/** 查询扩展与意图识别用的词表见 TERMS（data/business-terms.json），此处不再硬编码。 */
 
 /**
  * 轻量查询扩展：保留原始归一化串，同时生成少量同义替换变体。
@@ -114,7 +103,7 @@ const OUT_OF_SCOPE_TERMS = [
  */
 export function expandQueryVariants(normalized: string): string[] {
   const variants = new Set<string>([normalized]);
-  for (const [from, to] of QUERY_REPLACEMENTS) {
+  for (const [from, to] of TERMS.queryReplacements) {
     if (normalized.includes(from)) {
       variants.add(normalized.replace(from, to));
     }
@@ -124,34 +113,21 @@ export function expandQueryVariants(normalized: string): string[] {
 
 export function detectIntent(message: string, matchedFaqs: ScoredFaq[] = []): string {
   const normalized = normalize(message);
+  const kw = TERMS.intentKeywords;
 
-  if (hasAny(normalized, [
-    '转人工',
-    '找人工',
-    '真人沟通',
-  ])) {
+  if (hasAny(normalized, kw.human_handoff ?? [])) {
     return 'human_handoff';
   }
-  if (extractInquiryId(message) || hasAny(normalized, ['项目进展', '咨询进展', '项目编号', '咨询编号', '项目状态'])) {
+  if (extractInquiryId(message) || hasAny(normalized, kw.inquiry_status ?? [])) {
     return 'inquiry_status';
   }
   if (isOutOfScopeQuery(normalized)) {
     return 'out_of_scope';
   }
-  if (hasAny(normalized, ['报价', '多少钱', '价格', '费用', '预算', '怎么收费'])) {
-    return 'pricing';
-  }
-  if (hasAny(normalized, ['合作流程', '怎么合作', '开发流程', '项目流程', '交付时间', '开发周期'])) {
-    return 'collaboration';
-  }
-  if (hasAny(normalized, ['技术栈', 'react', 'vue', 'next.js', 'typescript', 'javascript'])) {
-    return 'tech_stack';
-  }
-  if (hasAny(normalized, ['作品集', '案例', '过往项目', 'portfolio'])) {
-    return 'portfolio';
-  }
-  if (hasAny(normalized, ['招聘', '全职', '兼职', '长期合作', '工作机会'])) {
-    return 'hiring';
+  for (const intent of ['pricing', 'collaboration', 'tech_stack', 'portfolio', 'hiring']) {
+    if (hasAny(normalized, kw[intent] ?? [])) {
+      return intent;
+    }
   }
 
   return matchedFaqs[0]?.intent || 'general';
@@ -161,7 +137,7 @@ export function detectIntent(message: string, matchedFaqs: ScoredFaq[] = []): st
  * 边界识别：命中明显非开发咨询领域词，且不存在业务信号时，标记为 out_of_scope。
  */
 export function isOutOfScopeQuery(normalized: string): boolean {
-  return hasAny(normalized, OUT_OF_SCOPE_TERMS) && !hasAny(normalized, BUSINESS_TERMS);
+  return hasAny(normalized, TERMS.outOfScopeTerms) && !hasAny(normalized, TERMS.businessTerms);
 }
 
 export interface HandoffDecision {
