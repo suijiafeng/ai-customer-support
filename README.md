@@ -207,12 +207,11 @@ docker run -d --name assistflow -p 3001:3001 \
 | `deepseek` | DeepSeek | `https://api.deepseek.com` | `deepseek-chat` |
 | `anthropic` | Anthropic (Claude) | `https://api.anthropic.com/v1` | `claude-sonnet-4-5` |
 | `gemini` | Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.5-flash` |
-| `zhipu` | 智谱 AI | `https://open.bigmodel.cn/api/paas/v4` | `glm-4.5` |
+| `zhipu` | 智谱 AI | `https://open.bigmodel.cn/api/paas/v4` | `glm-4.7-flash`（免费档） |
 | `moonshot` | Moonshot (Kimi) | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
 | `qwen` | 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
 | `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | `openai/gpt-4o` |
 | `groq` | Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
-| `github` | GitHub Models | `https://models.github.ai/inference` | `openai/gpt-4.1`（Key 用 GitHub PAT，需 `models:read`） |
 | `siliconflow` | 硅基流动 | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V3` |
 | `xai` | xAI (Grok) | `https://api.x.ai/v1` | `grok-4` |
 | `ollama` | Ollama 本地 | `http://localhost:11434/v1` | `qwen3:8b`（无需 Key） |

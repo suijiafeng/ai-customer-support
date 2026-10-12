@@ -40,7 +40,7 @@ export const AI_PROVIDER_PRESETS: Record<string, AiProviderPreset> = {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
     model: 'gemini-2.5-flash',
   },
-  zhipu: { label: '智谱 AI', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.5' },
+  zhipu: { label: '智谱 AI', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.7-flash' },
   moonshot: { label: 'Moonshot (Kimi)', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
   qwen: {
     label: '通义千问',
@@ -49,8 +49,6 @@ export const AI_PROVIDER_PRESETS: Record<string, AiProviderPreset> = {
   },
   openrouter: { label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o' },
   groq: { label: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
-  // GitHub Models：用 GitHub PAT（需 models:read 权限）鉴权，模型名是 publisher/model 形式
-  github: { label: 'GitHub Models', baseUrl: 'https://models.github.ai/inference', model: 'openai/gpt-4.1' },
   siliconflow: {
     label: '硅基流动',
     baseUrl: 'https://api.siliconflow.cn/v1',
