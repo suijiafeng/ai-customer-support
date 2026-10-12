@@ -52,7 +52,7 @@ button { font-family: inherit; }
 .body { flex: 1; display: flex; min-height: 0; position: relative; }
 
 /* ---- 左侧深色侧栏：品牌 + 主导航 + 队列/子菜单 + 客服状态卡 ---- */
-.side { width: 264px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0;
+.side { width: 232px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0;
   background: var(--side-bg); color: var(--side-text); border-right: 1px solid var(--side-border); }
 .side-head { padding: 14px 12px 10px; display: flex; flex-direction: column; gap: 12px; }
 .side-brand { display: flex; align-items: center; gap: 10px; padding: 2px 4px; background: none; border: 0;
@@ -311,7 +311,7 @@ button.loading::before {
 }
 /* 平板/窄屏：收窄侧栏 */
 @media (max-width: 900px) {
-  .side { width: 240px; }
+  .side { width: 216px; }
 }
 /* 移动端：侧栏改为默认收起的抽屉，聊天区占满全宽；品牌/主导航/状态卡由顶栏与底部 Tab 承担 */
 @media (max-width: 640px) {

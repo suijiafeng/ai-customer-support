@@ -2,6 +2,7 @@ import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from '
 import type { SessionSummary } from '@assistflow/shared';
 import { fmtTime, type AgentIdentity } from '../api.js';
 import Icon from '../ui/Icon.js';
+import { visitorDisplayName } from '../ui/visitor.js';
 
 // 列表时间：当天显示 HH:MM，非当天显示 M/D
 function fmtListTime(iso?: string): string {
@@ -80,7 +81,7 @@ const SessionItem = memo(function SessionItem({ s, active, unread, onSelect }: S
     >
       <div className="sess-main">
         <div className="sess-top">
-          <span className="name">{s.displayName}</span>
+          <span className="name" title={s.displayName}>{visitorDisplayName(s.displayName)}</span>
           {waiting && <span className="human-tag" title="访客请求人工接待">人工</span>}
           {!done && s.priority === 'high' && <span className="prio-tag" title="高优先级">急</span>}
           {!done && s.sentiment === 'negative' && <span className="mood-tag" title="客户情绪负面，请优先安抚">⚠</span>}

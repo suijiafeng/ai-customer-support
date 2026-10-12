@@ -58,7 +58,6 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-/** 租户管理：admin 专属。支持名称/ID 搜索、分页；弹窗创建；密钥脱敏显示、点击复制。 */
 /** 模型管理里的模型（租户指定 AI 模型用） */
 interface ModelOption {
   id: string;
@@ -102,6 +101,7 @@ function ModelSelect({
   );
 }
 
+/** 租户管理：admin 专属。支持名称/ID 搜索、分页；弹窗创建；密钥脱敏显示、点击复制。 */
 export default function TenantsPanel() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
