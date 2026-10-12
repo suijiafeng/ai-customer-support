@@ -7,13 +7,15 @@ export default `
 .quick-pop button:hover { background: #f1f5f9; }
 
 .afw { position: fixed; right: 20px; bottom: 128px; z-index: 2147483000;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  /* 主题色变量：data-theme 传入后由行内样式覆盖 */
+  --afw-brand: var(--afw-brand); --afw-brand-rgb: 36, 87, 197; --afw-brand-soft: var(--afw-brand-soft); }
 .fab { width: 50px; height: 50px; border-radius: 50%; border: none; cursor: pointer;
-  background: #2457c5; color: #fff; font-size: 22px; touch-action: none;
+  background: var(--afw-brand); color: #fff; font-size: 22px; touch-action: none;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 8px 22px rgba(36,87,197,.4);
+  box-shadow: 0 8px 22px rgba(var(--afw-brand-rgb),.4);
   transition: transform .15s ease, box-shadow .15s ease, left .22s ease, top .22s ease; }
-.fab:hover { transform: translateY(-2px) scale(1.04); box-shadow: 0 12px 28px rgba(36,87,197,.45); }
+.fab:hover { transform: translateY(-2px) scale(1.04); box-shadow: 0 12px 28px rgba(var(--afw-brand-rgb),.45); }
 .fab:active { transform: scale(.96); }
 /* 拖动中：关闭位移过渡（跟手），松手后过渡生效产生吸附动画 */
 .fab.dragging { transition: none; cursor: grabbing; }
@@ -25,7 +27,7 @@ export default `
 /* 访客消息发送状态 / 失败重试 */
 .msg-status { font-size: 12px; color: #94a3b8; margin: 4px 4px 0; text-align: right; }
 .msg-status.failed { color: #ef4444; }
-.retry-link { margin-left: 6px; border: none; background: none; color: #2457c5; font-size: 12px;
+.retry-link { margin-left: 6px; border: none; background: none; color: var(--afw-brand); font-size: 12px;
   cursor: pointer; padding: 0; text-decoration: underline; }
 .backdrop { position: fixed; inset: 0; z-index: 2147483001; border: 0; padding: 0; cursor: default;
   background: rgba(15,23,42,.34); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
@@ -48,7 +50,7 @@ export default `
 .rs-nw { top: 0; left: 0; width: 14px; height: 14px; cursor: nwse-resize; }
 .rs-se { bottom: 0; right: 0; width: 14px; height: 14px; cursor: nwse-resize; }
 .rs-sw { bottom: 0; left: 0; width: 14px; height: 14px; cursor: nesw-resize; }
-.head { background: #2457c5; color: #fff; padding: 14px 16px;
+.head { background: var(--afw-brand); color: #fff; padding: 14px 16px;
   font-weight: 600; display: flex; justify-content: space-between; align-items: center;
   cursor: grab; touch-action: none; user-select: none; }
 .panel.dragging .head { cursor: grabbing; }
@@ -71,18 +73,18 @@ export default `
 .avatar { flex-shrink: 0; width: 34px; height: 34px; border-radius: 8px; display: flex;
   align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
   color: #fff; background: #94a3b8; }
-.avatar.customer { background: #2457c5; }
+.avatar.customer { background: var(--afw-brand); }
 .avatar.ai { background: #8097b8; }
-.avatar.agent { background: #2457c5; }
+.avatar.agent { background: var(--afw-brand); }
 .col { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; max-width: 78%; }
 .row.customer .col { align-items: flex-end; }
 .meta { font-size: 12px; color: #94a3b8; margin: 0 2px 4px; }
 .bubble { position: relative; max-width: 100%; padding: 10px 12px; border-radius: 12px; font-size: 14px;
   line-height: 1.55; word-break: break-word; box-shadow: 0 1px 2px rgba(20,30,55,.08); }
-.customer .bubble { background: #2457c5; color: #fff; border-bottom-right-radius: 4px; }
+.customer .bubble { background: var(--afw-brand); color: #fff; border-bottom-right-radius: 4px; }
 .ai .bubble, .agent .bubble { background: #fff; color: #1e293b; border-bottom-left-radius: 4px; }
-.system .bubble { background: #eef2fb; color: #2457c5; font-size: 12px; border-radius: 8px; box-shadow: none; }
-.bubble a { color: #2457c5; text-decoration: underline; word-break: break-all; }
+.system .bubble { background: var(--afw-brand-soft); color: var(--afw-brand); font-size: 12px; border-radius: 8px; box-shadow: none; }
+.bubble a { color: var(--afw-brand); text-decoration: underline; word-break: break-all; }
 .customer .bubble a { color: rgba(255,255,255,.85); }
 .time { font-size: 12px; color: #94a3b8; margin: 4px 4px 0; }
 .row.customer .time { text-align: right; }
@@ -93,18 +95,18 @@ export default `
 .typing-dots i:nth-child(3) { animation-delay: .4s; }
 @keyframes afw-blink { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
 .to-bottom { position: absolute; right: 14px; bottom: 14px; width: 34px; height: 34px; border-radius: 50%;
-  border: 1px solid #e2e8f0; background: #fff; color: #2457c5; font-size: 16px; cursor: pointer;
+  border: 1px solid #e2e8f0; background: #fff; color: var(--afw-brand); font-size: 16px; cursor: pointer;
   box-shadow: 0 4px 12px rgba(15,23,42,.16); display: flex; align-items: center; justify-content: center;
   transition: transform .15s, opacity .15s; }
 .to-bottom:hover { transform: translateY(-1px); }
 .handoff-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  margin: 0 10px 6px; padding: 6px 10px; border-radius: 10px; background: #eef2fb; color: #2457c5; font-size: 12px; }
-.handoff-bar button { border: 1px solid #2457c5; background: #fff; color: #2457c5; border-radius: 8px;
+  margin: 0 10px 6px; padding: 6px 10px; border-radius: 10px; background: var(--afw-brand-soft); color: var(--afw-brand); font-size: 12px; }
+.handoff-bar button { border: 1px solid var(--afw-brand); background: #fff; color: var(--afw-brand); border-radius: 8px;
   padding: 3px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .handoff-bar button:disabled { opacity: .5; cursor: not-allowed; }
 .composer { margin: 8px 10px 10px; border: 1px solid #cbd5e1; border-radius: 12px;
   background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.04); transition: border-color .2s, box-shadow .2s; }
-.composer:focus-within { border-color: #2457c5; box-shadow: 0 0 0 3px rgba(36,87,197,.12); }
+.composer:focus-within { border-color: var(--afw-brand); box-shadow: 0 0 0 3px rgba(var(--afw-brand-rgb),.12); }
 textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 120px; resize: none;
   border: 0; border-radius: 12px; padding: 10px 12px 4px; font-size: 14px; line-height: 1.5;
   outline: none; font-family: inherit; background: transparent; }
@@ -113,7 +115,7 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
   textarea { font-size: 16px; }
 }
 .composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 8px; }
-.send { border: none; background: #2457c5; color: #fff; border-radius: 12px;
+.send { border: none; background: var(--afw-brand); color: #fff; border-radius: 12px;
   min-width: 68px; height: 32px; padding: 0 16px; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .1s; }
 .send:hover:not(:disabled) { opacity: .92; }
 .send:active:not(:disabled) { transform: scale(.97); }
@@ -141,7 +143,7 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
 .tool { background: transparent; border: none; font-size: 18px; cursor: pointer; line-height: 1;
   width: 30px; height: 30px; padding: 0; border-radius: 8px; transition: background .15s;
   display: flex; align-items: center; justify-content: center; }
-.tool:hover, .tool.active { background: #eef2fb; }
+.tool:hover, .tool.active { background: var(--afw-brand-soft); }
 .key-hint { margin-left: 4px; color: #94a3b8; font-size: 12px; white-space: nowrap; }
 .cooldown-bar { margin: 0 10px 8px; padding: 8px 12px; font-size: 14px; line-height: 1.4;
   color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; }
@@ -161,12 +163,12 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
 .ep-tab { background: none; border: none; cursor: pointer; font-size: 18px; padding: 6px 8px;
   border-radius: 8px 8px 0 0; line-height: 1; border-bottom: 2px solid transparent; transition: background .1s; }
 .ep-tab:hover { background: #f8fafc; }
-.ep-tab.active { border-bottom-color: #2457c5; background: #eef2fb; }
+.ep-tab.active { border-bottom-color: var(--afw-brand); background: var(--afw-brand-soft); }
 .ep-grid { display: grid; grid-template-columns: repeat(8, 1fr); padding: 6px; gap: 2px;
   max-height: 220px; overflow-y: auto; }
 .ep-btn { background: none; border: none; cursor: pointer; font-size: 20px; padding: 4px;
   border-radius: 8px; line-height: 1; transition: background .1s; text-align: center; }
-.ep-btn:hover { background: #eef2fb; }
+.ep-btn:hover { background: var(--afw-brand-soft); }
 
 /* 窄屏（≤600px）：略收窄面板，留出边距 */
 .afw.narrow .panel { width: min(420px, calc(100vw - 24px)); }

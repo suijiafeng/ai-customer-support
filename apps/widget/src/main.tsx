@@ -2,10 +2,10 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import Widget from './Widget';
 import css from './styles.js';
-
+import { resolveTheme } from './theme';
 
 // 嵌入入口：读取 <script> 上的配置，挂载到隔离的 Shadow DOM
-// 宿主通过 data-key、data-name、data-api-base、data-title 覆盖默认值；
+// 宿主通过 data-key、data-name、data-api-base、data-title、data-theme 覆盖默认值；
 // 默认使用 widget.js 所在源作为 API 源，方便用同域反向代理隐藏真实 server 域名。
 function readConfig() {
   const el = (document.currentScript ||
@@ -18,6 +18,7 @@ function readConfig() {
     siteKey: ds.key || 'BV1b-HT6U-JcTj-7Rds',
     tenantId: ds.name || 'tn_bd8020dbc0',
     title: ds.title || '',
+    theme: resolveTheme(ds.theme),
   };
 }
 
@@ -39,6 +40,7 @@ function mount() {
     <Widget
       apiBase={cfg.apiBase}
       title={cfg.title}
+      theme={cfg.theme}
       // 标识由 widget 在首次发消息时惰性生成并校验，这里只传租户身份（key + ID）
       siteKey={cfg.siteKey}
       tenantId={cfg.tenantId}

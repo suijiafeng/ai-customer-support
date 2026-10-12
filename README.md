@@ -355,6 +355,7 @@ node scripts/dialog-test.js    # 访客↔客服对话时序回归
 - 构建命令：`npm ci && npm run build --workspace @assistflow/shared && npm run build --workspace assistflow-widget`
 - 产物目录：`apps/widget/dist`（只有一个 `widget.js`），上传到静态托管/CDN 即可，不需要环境变量
 - 第三方网站嵌入：`<script src="https://<widget 部署域名>/widget.js" data-key="租户密钥" data-name="租户ID"></script>`（密钥与租户ID在工作台「租户管理」创建后复制；`data-key`、`data-name` 必填且必须匹配；租户配置了域名时，还会校验请求来源域名，未配置则不校验）
+- 主题色：嵌入脚本加 `data-theme="#0d9488"`（任意 `#rgb` / `#rrggbb`）即可整体换肤，不传则用默认蓝 `#2457c5`。同理可用 `data-title` 改头部标题。
 - 默认情况下，widget 会把 `widget.js` 所在域名作为 API 基址，请在该域名/CDN 上把 `/api/*` 反向代理到 server。这样嵌入代码不需要暴露 server 部署域名。若无法配置代理，也可以继续显式传 `data-api-base="https://<server 部署域名>"`，但浏览器网络请求仍会暴露真实 API 地址，前端加密无法隐藏它。
 
 **demo**（widget 嵌入演示站，可选，不部署也不影响 server/workstation/widget 正常工作）：

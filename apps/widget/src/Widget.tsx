@@ -8,6 +8,7 @@ import { useDraggableFab } from './hooks/useDraggableFab.js';
 import { useEmojiPicker } from './hooks/useEmojiPicker.js';
 import { useSendCooldown } from './hooks/useSendCooldown.js';
 import { useChatSession } from './hooks/useChatSession.js';
+import type { ThemeVars } from './theme.js';
 
 interface WidgetProps {
   apiBase: string;
@@ -15,6 +16,8 @@ interface WidgetProps {
   siteKey: string;
   /** 租户ID（data-name），与 siteKey 成对，后端校验两者匹配 */
   tenantId: string;
+  /** 主题色变量（data-theme 解析后），挂到根节点覆盖 CSS 变量默认值 */
+  theme?: ThemeVars;
 }
 
 const imageEnabled = false; // 是否启用图片发送（后端未实现相关接口，暂时隐藏入口）
@@ -41,7 +44,7 @@ const QUICK_MESSAGES = [
   '如何联系你？',
 ];
 
-export default function Widget({ apiBase, title, siteKey, tenantId }: WidgetProps) {
+export default function Widget({ apiBase, title, siteKey, tenantId, theme }: WidgetProps) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [pending, setPending] = useState<PendingImage[]>([]); // 待发送图片附件
@@ -264,7 +267,14 @@ export default function Widget({ apiBase, title, siteKey, tenantId }: WidgetProp
   [fabPos]);
 
   return (
-    <div className={`afw${mobile ? ' mobile' : narrow ? ' narrow' : ''}`}>
+    <div
+      className={`afw${mobile ? ' mobile' : narrow ? ' narrow' : ''}`}
+      style={theme ? ({
+        '--afw-brand': theme.brand,
+        '--afw-brand-rgb': theme.brandRgb,
+        '--afw-brand-soft': theme.brandSoft,
+      } as React.CSSProperties) : undefined}
+    >
       {open && (
         <>
           {mobile && (
