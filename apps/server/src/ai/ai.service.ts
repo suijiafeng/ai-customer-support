@@ -82,6 +82,16 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     return this.buildClient();
   }
 
+  /** 指定模型（租户专属）实际生效的连接；不可用时已回退默认 */
+  connectionFor(modelId?: string | null): ActiveConnection {
+    return this.modelSettings.getConnectionFor(modelId);
+  }
+
+  /** 指定模型（租户专属）当前能否调用 AI */
+  isAvailableFor(modelId?: string | null): boolean {
+    return appConfig.aiFeatureEnabled && Boolean(this.clientFor(this.connectionFor(modelId)));
+  }
+
   getActiveClient(): OpenAI | null {
     if (!appConfig.aiFeatureEnabled) {
       return null;

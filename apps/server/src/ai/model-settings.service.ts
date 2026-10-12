@@ -91,7 +91,8 @@ function reservedDeepSeek(model?: string): ModelEntry {
 function envEntry(provider: string, model: string): ModelEntry {
   const t = nowIso();
   return {
-    id: provider === 'deepseek' ? RESERVED_DEEPSEEK_ID : newId(),
+    // 固定 ID：配置文件尚未写入时每次启动都会重新推导，随机 ID 会让租户的指定模型在重启后失效
+    id: provider === 'deepseek' ? RESERVED_DEEPSEEK_ID : `env_${provider}`,
     name: AI_PROVIDER_PRESETS[provider]?.label || provider,
     provider: AI_PROVIDER_PRESETS[provider] ? provider : 'custom',
     baseUrl: '',
@@ -118,14 +119,15 @@ export function isProviderKeyConfigured(providerKey: string): boolean {
   const preset = AI_PROVIDER_PRESETS[providerKey];
   if (!preset) return false;
   if (preset.keyOptional) return true;
-  const vendorVar = `${providerKey.toUpperCase()}_API_KEY`;
-  return Boolean(process.env[vendorVar] || process.env.AI_API_KEY);
+  return Boolean(envKeyFor(providerKey));
 }
 
 /** 环境变量里该厂商可用的 Key（厂商专属变量优先，再回退全局 AI Key）。 */
 function envKeyFor(provider: string): string {
+  const env = process.env;
   const vendorVar = `${provider.toUpperCase()}_API_KEY`;
-  return process.env[vendorVar] || appConfig.aiApiKey || '';
+  // 实时读取（与 config.ts 的旧变量名兜底一致），便于测试与运行期调整
+  return env[vendorVar] || env.AI_API_KEY || env.OPENAI_API_KEY || env.DEEPSEEK_API_KEY || '';
 }
 
 /** Key 来源：custom=本条专属；env=环境变量；optional=本地服务无需 Key；none=未配置 */
@@ -290,7 +292,15 @@ export class ModelSettingsService implements OnModuleInit, OnModuleDestroy {
    */
   getConnectionFor(id?: string | null): ActiveConnection {
     const picked = id ? this.settings.models.find((m) => m.id === id && m.enabled) : undefined;
-    const e = picked || this.defaultEntry();
+    if (picked) {
+      const conn = this.connectionOf(picked);
+      // 指定模型没有可用 Key（专属 Key 与环境变量都没有）时回退默认，而不是让 AI 直接失效
+      if (conn.apiKey) return conn;
+    }
+    return this.connectionOf(this.defaultEntry());
+  }
+
+  private connectionOf(e: ModelEntry): ActiveConnection {
     const preset = AI_PROVIDER_PRESETS[e.provider];
     const baseUrl =
       e.baseUrl || (e.provider === appConfig.aiProvider ? appConfig.aiBaseUrl : '') || preset?.baseUrl || '';

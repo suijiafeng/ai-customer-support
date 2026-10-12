@@ -177,7 +177,8 @@ test('isProviderKeyConfigured：厂商专属变量优先，回退 AI_API_KEY', a
 test('租户专属模型连接：可用时使用，停用/不存在时回退默认', async () => {
   const { svc, dir } = await makeService(null);
   try {
-    const q = await svc.createModel({ provider: 'qwen', model: 'qwen-max' });
+    // 自带专属 Key：不依赖本机环境变量（无可用 Key 的模型会回退默认）
+    const q = await svc.createModel({ provider: 'qwen', model: 'qwen-max', apiKey: 'sk-qwen-test' });
     assert.equal(svc.getConnectionFor(q.id).model, 'qwen-max');
     assert.equal(svc.isUsable(q.id), true);
     await svc.updateModel(q.id, { enabled: false });
@@ -186,4 +187,36 @@ test('租户专属模型连接：可用时使用，停用/不存在时回退默�
     assert.equal(svc.getConnectionFor('mdl_missing').id, svc.getDefaultId());
     assert.equal(svc.getConnectionFor(null).id, svc.getDefaultId());
   } finally { await teardown(svc, dir); }
+});
+
+test('旧格式迁移出的环境变量模型使用固定 ID（重启后租户指定不失效）', async () => {
+  const a = await makeService({ defaultProvider: 'zhipu', defaultModel: 'glm-4.6', enabled: {} });
+  const idA = a.svc.getDefaultId();
+  await teardown(a.svc, a.dir);
+  const b = await makeService({ defaultProvider: 'zhipu', defaultModel: 'glm-4.6', enabled: {} });
+  try {
+    assert.equal(idA, 'env_zhipu');
+    assert.equal(b.svc.getDefaultId(), idA);
+  } finally { await teardown(b.svc, b.dir); }
+});
+
+test('租户指定模型没有可用 Key 时回退默认模型', async () => {
+  const saved = { ...process.env };
+  const { svc, dir } = await makeService(null);
+  try {
+    for (const k of ['MOONSHOT_API_KEY', 'AI_API_KEY', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY']) delete process.env[k];
+    const def = await svc.createModel({ provider: 'custom', baseUrl: 'https://llm.example.com/v1', model: 'm', apiKey: 'sk-def-1' });
+    await svc.setDefault(def.id);
+    const noKey = await svc.createModel({ provider: 'moonshot' });
+    // 专属 Key 与环境变量都没有 → 指定模型不可用，回退默认
+    assert.equal(svc.getConnectionFor(noKey.id).id, def.id);
+    assert.equal(svc.getConnectionFor(noKey.id).apiKey, 'sk-def-1');
+    // 有专属 Key 时使用指定模型
+    await svc.updateModel(noKey.id, { apiKey: 'sk-own-2' });
+    assert.equal(svc.getConnectionFor(noKey.id).id, noKey.id);
+  } finally {
+    await teardown(svc, dir);
+    for (const k of Object.keys(process.env)) delete process.env[k];
+    Object.assign(process.env, saved);
+  }
 });

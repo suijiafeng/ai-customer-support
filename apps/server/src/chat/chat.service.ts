@@ -212,6 +212,9 @@ export class ChatService {
       };
     }
 
+    // 租户在「租户管理」里指定了模型就用它，否则（或该模型不可用）用默认模型
+    const tenantModelId = this.widgetKeys.get(tenantKey)?.modelId;
+    const conn = this.ai.connectionFor(tenantModelId);
     const matchedFaqs = this.knowledge.searchFaqs(message);
     const inquiry = this.knowledge.findInquiry(message);
     const intent = detectIntent(message, matchedFaqs);
@@ -222,7 +225,7 @@ export class ChatService {
       matchedFaqs,
       sentiment,
       inquiry,
-      Boolean(this.ai.getActiveClient())
+      this.ai.isAvailableFor(tenantModelId)
     );
     const ticket = handoff.needHuman
       ? this.tickets.create({ sessionId, message, intent, reason: handoff.reason, inquiry })
@@ -232,15 +235,14 @@ export class ChatService {
     this.sessions.upsertSession({
       sessionId, message, profile, visitor, tenantKey,
       workflow: {
-        ai: { provider: this.ai.provider, model: this.ai.getActiveModel(), used: false, fallback: false, error: null },
+        ai: { provider: conn.provider, model: conn.model, used: false, fallback: false, error: null },
         intent, sentiment, needHuman: handoff.needHuman, reason: handoff.reason, inquiry, ticket, sources: [],
       },
     });
     this.sessionTicket.notify(sessionId);
 
     const replyResult = await this.ai.buildReply(
-      // 租户在「租户管理」里指定了模型就用它，否则（或该模型不可用）用默认模型
-      { message, history, matchedFaqs, intent, handoff, inquiry, ticket, modelId: this.widgetKeys.get(tenantKey)?.modelId },
+      { message, history, matchedFaqs, intent, handoff, inquiry, ticket, modelId: tenantModelId },
       onDelta
     );
     const reply = replyResult.text;
