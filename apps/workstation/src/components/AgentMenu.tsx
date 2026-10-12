@@ -70,7 +70,6 @@ export default function AgentMenu({ agent, sessions, connected, onLogout, varian
               <b>{agent.name}</b>
               <span className={`online${connected ? '' : ' off'}`}><i aria-hidden="true" />{connected ? '在线' : '离线'}</span>
             </span>
-            <span className="agent-status-sub">接待中 {myActive} · 已解决 {myResolved}</span>
           </span>
           <Icon name="chevron-down" size={14} style={{ transition: 'transform .2s', transform: open ? 'none' : 'rotate(180deg)' }} />
         </button>

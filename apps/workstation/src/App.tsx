@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { clearAuth, getStoredAgent, getToken, type AgentIdentity } from './api.js';
 import { useQueueEvents } from './hooks/useQueueEvents.js';
 import { useHistoryBack } from './hooks/useHistoryBack.js';
+import { useResizableWidth } from './hooks/useResizableWidth.js';
 import SessionQueue from './components/SessionQueue.js';
 import ChatPanel from './components/ChatPanel.js';
 import Login from './components/Login.js';
@@ -50,6 +51,9 @@ const SYSTEM_SUB_VIEWS: SystemSubViewDef[] = [
   { key: 'users', label: '用户管理', icon: 'user', adminOnly: true },
 ];
 
+// 侧栏默认宽度：窗口宽度的 20%（不足最小宽度时取最小宽度）
+const sideDefaultWidth = () => window.innerWidth * 0.2;
+
 function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () => void }) {
   const { sessions, connected, ready: queueReady } = useQueueEvents();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -83,6 +87,13 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
   );
   // 移动端侧栏即抽屉：会话接待时展示队列，数据管理时展示子菜单
   const sideOpen = view === 'sessions' ? queueOpen : systemMenuOpen;
+  // 桌面端侧栏宽度：最小 300px，默认占窗口 20%（随窗口缩放），可拖拽调整到最宽 40%，拖过后按浏览器记住
+  const side = useResizableWidth({
+    storageKey: 'assistflow.sideWidth',
+    defaultWidth: sideDefaultWidth,
+    min: 300,
+    maxViewportRatio: 0.4,
+  });
 
   return (
     <div className="app">
@@ -127,7 +138,11 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
         </div>
       </header>
       <div className="body">
-        <aside className={`side${sideOpen ? ' open' : ''}`} aria-label="侧边栏">
+        <aside
+          className={`side${sideOpen ? ' open' : ''}${side.dragging ? ' resizing' : ''}`}
+          aria-label="侧边栏"
+          style={{ '--side-w': `${side.width}px` } as React.CSSProperties}
+        >
           <div className="side-head">
             <button className="side-brand" type="button" onClick={() => setView('sessions')}>
               <span className="side-logo"><Icon name="brand" size={16} /></span>
@@ -181,6 +196,19 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
           <div className="side-foot">
             <AgentMenu agent={agent} sessions={sessions} connected={connected} onLogout={onLogout} variant="card" />
           </div>
+          {/* 右边缘分隔条：拖动调整宽度，双击恢复默认，聚焦后可用方向键微调 */}
+          <div
+            className="side-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整侧栏宽度"
+            aria-valuenow={side.width}
+            aria-valuemin={side.min}
+            aria-valuemax={side.max}
+            tabIndex={0}
+            title="拖动调整宽度，双击恢复默认"
+            {...side.handleProps}
+          />
         </aside>
         {sideOpen && (
           <div
