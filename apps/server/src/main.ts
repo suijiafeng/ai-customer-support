@@ -30,6 +30,14 @@ async function bootstrap() {
   app.useBodyParser('json', { limit: '12mb' });
   app.enableShutdownHooks();
 
+  // 退出时先断开 SSE 等长连接，否则 server.close 会一直等下去。
+  // 必须在 listen 之前注册：Nest 关闭钩子处理完会移除自身监听并给进程补发同一信号以退出，
+  // 若此处在 listen 之后才注册，启动期间收到的信号（如 node --watch 重启）会让这里吞掉补发信号，进程卡死不退出。
+  const httpServer = app.getHttpServer();
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.once(signal, () => httpServer.closeAllConnections());
+  }
+
   // SSE 反缓冲头（Nginx/边缘代理不缓冲事件流）必须在响应头发出前设置：
   // @Sse 路由由 Nest 先 writeHead 再执行拦截器，只能用前置中间件；
   // Cache-Control 由 SseStream 的 writeHead 自带 no-cache, no-transform，无需重复设置。
@@ -84,11 +92,6 @@ async function bootstrap() {
 
   await app.listen(appConfig.port);
   console.log(`AssistFlow server running at http://localhost:${appConfig.port}`);
-
-  const httpServer = app.getHttpServer();
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    process.once(signal, () => httpServer.closeAllConnections());
-  }
 }
 
 bootstrap();
