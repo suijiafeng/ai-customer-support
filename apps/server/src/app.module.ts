@@ -1,11 +1,15 @@
 import { Module } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AiService } from './ai/ai.service.js';
+import { ModelSettingsService } from './ai/model-settings.service.js';
+import { ModelsController } from './ai/models.controller.js';
 import { AuthController } from './auth/auth.controller.js';
 import { AuthService } from './auth/auth.service.js';
+import { UsersController } from './auth/users.controller.js';
 import { ChatController } from './chat/chat.controller.js';
 import { ChatService } from './chat/chat.service.js';
 import { KnowledgeService } from './knowledge/knowledge.service.js';
+import { FaqsAdminController } from './knowledge/faqs-admin.controller.js';
 import { MetaController } from './metrics/meta.controller.js';
 import { MetricsService } from './metrics/metrics.service.js';
 import { SessionsController } from './sessions/sessions.controller.js';
@@ -29,17 +33,21 @@ import { WidgetKeysService } from './widget-keys/widget-keys.service.js';
   ],
   controllers: [
     AuthController,
+    UsersController,
     ChatController,
     SessionsController,
     TicketsController,
     MetaController,
     WidgetKeysController,
+    FaqsAdminController,
+    ModelsController,
   ],
   providers: [
     AuthService,
     StoreService,
     KnowledgeService,
     AiService,
+    ModelSettingsService,
     SseService,
     SessionsService,
     TicketsService,

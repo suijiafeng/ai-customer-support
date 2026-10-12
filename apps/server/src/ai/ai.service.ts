@@ -5,8 +5,9 @@ import path from 'node:path';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import OpenAI from 'openai';
 import type { AiUsage, Inquiry, Message, Ticket } from '@assistflow/shared';
-import { appConfig } from '../config.js';
+import { appConfig, AI_PROVIDER_PRESETS } from '../config.js';
 import type { HandoffDecision, ScoredFaq } from '../rules/rules.js';
+import { ModelSettingsService } from './model-settings.service.js';
 
 export interface BuildReplyParams {
   message: string;
@@ -36,13 +37,38 @@ const AI_TIMEOUT_MS = 30_000;
 @Injectable()
 export class AiService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AiService.name);
-  /** 单一 OpenAI 兼容客户端：AI_API_KEY + 可选 AI_BASE_URL（留空即 OpenAI 官方） */
-  private readonly client = appConfig.aiApiKey
-    ? new OpenAI({
-        apiKey: appConfig.aiApiKey,
-        ...(appConfig.aiBaseUrl ? { baseURL: appConfig.aiBaseUrl } : {}),
-      })
-    : null;
+
+  constructor(private readonly modelSettings: ModelSettingsService) {}
+
+  /**
+   * OpenAI 兼容客户端：延迟构建 + 按连接参数缓存。
+   * 运营在工作台切换默认厂商/模型后，下次调用自动重建，无需重启。
+   */
+  private client: OpenAI | null = null;
+  private clientCacheKey = '';
+
+  /** 当前生效的连接参数：厂商/模型跟随运营设置；baseUrl 仅在厂商与 env 一致时沿用 env 覆盖。 */
+  private resolveConnection(): { provider: string; model: string; baseUrl: string; apiKey: string } {
+    const provider = this.modelSettings.getActiveProvider();
+    const model = this.modelSettings.getActiveModel();
+    const preset = AI_PROVIDER_PRESETS[provider];
+    const baseUrl = provider === appConfig.aiProvider ? appConfig.aiBaseUrl : preset?.baseUrl || '';
+    return { provider, model, baseUrl, apiKey: appConfig.aiApiKey };
+  }
+
+  private buildClient(): OpenAI | null {
+    const { baseUrl, apiKey } = this.resolveConnection();
+    const cacheKey = `${apiKey}\n${baseUrl}`;
+    if (this.client && this.clientCacheKey === cacheKey) return this.client;
+    this.clientCacheKey = cacheKey;
+    this.client = apiKey
+      ? new OpenAI({
+          apiKey,
+          ...(baseUrl ? { baseURL: baseUrl } : {}),
+        })
+      : null;
+    return this.client;
+  }
 
   /** 运营侧可修改的 AI 人设指令（从 data/ai-persona.txt 加载） */
   private instructions = '';
@@ -50,15 +76,15 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   private personaReloadTimer: ReturnType<typeof setTimeout> | null = null;
 
   get provider(): string {
-    return appConfig.aiProvider;
+    return this.modelSettings.getActiveProvider();
   }
 
   getActiveModel(): string {
-    return appConfig.aiModel;
+    return this.modelSettings.getActiveModel();
   }
 
   getConfiguredClient(): OpenAI | null {
-    return this.client;
+    return this.buildClient();
   }
 
   getActiveClient(): OpenAI | null {

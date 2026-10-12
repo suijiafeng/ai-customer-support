@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import { watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import type { Faq, Inquiry } from '@assistflow/shared';
 import { appConfig } from '../config.js';
@@ -54,6 +55,14 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
   private watchers: FSWatcher[] = [];
   private reloadTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /**
+   * 数据目录：调用时读取，便于测试时用进程环境变量指向临时目录
+   * （构造器保持无参，Nest DI 不受影响）。
+   */
+  private get dataDir(): string {
+    return process.env.DATA_DIR || appConfig.dataDir;
+  }
+
   async onModuleInit() {
     // 首次加载失败直接抛出，阻止服务带着空知识库静默启动（fail-fast）
     await this.load();
@@ -76,9 +85,9 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
    */
   async load(): Promise<void> {
     const [faqsRaw, inquiriesRaw, smallTalkRaw] = await Promise.all([
-      fs.readFile(path.join(appConfig.dataDir, 'faqs.json'), 'utf8'),
-      fs.readFile(path.join(appConfig.dataDir, 'inquiries.json'), 'utf8'),
-      fs.readFile(path.join(appConfig.dataDir, 'small-talk.json'), 'utf8'),
+      fs.readFile(path.join(this.dataDir, 'faqs.json'), 'utf8'),
+      fs.readFile(path.join(this.dataDir, 'inquiries.json'), 'utf8'),
+      fs.readFile(path.join(this.dataDir, 'small-talk.json'), 'utf8'),
     ]);
 
     const faqs: Faq[] = JSON.parse(faqsRaw);
@@ -93,11 +102,124 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
     this.smallTalkMatcher = createSmallTalkMatcher(smallTalkGroups);
   }
 
+  // ---------- FAQ 运营管理（工作台「知识库」页） ----------
+
+  /** 校验单条 FAQ 的可写字段，返回清洗后的对象；非法时抛出 Error（controller 转 400）。 */
+  private static sanitizeFaqInput(input: any): {
+    question: string;
+    answer: string;
+    keywords: string[];
+    intent?: string;
+  } {
+    const question = String(input?.question ?? '').trim();
+    const answer = String(input?.answer ?? '').trim();
+    if (!question) throw new Error('question 不能为空');
+    if (!answer) throw new Error('answer 不能为空');
+    if (question.length > 200) throw new Error('question 过长（最多 200 字）');
+    if (answer.length > 5000) throw new Error('answer 过长（最多 5000 字）');
+    const rawKeywords: any[] = Array.isArray(input?.keywords) ? input.keywords : [];
+    const keywords: string[] = [
+      ...new Set<string>(rawKeywords.map((k) => String(k).trim()).filter((s) => s.length > 0)),
+    ].slice(0, 20);
+    const intent = String(input?.intent ?? '').trim();
+    return { question, answer, keywords, ...(intent ? { intent } : {}) };
+  }
+
+  private generateFaqId(): string {
+    let id = '';
+    do {
+      id = 'faq_' + randomBytes(4).toString('hex');
+    } while (this.faqs.some((f) => f.id === id));
+    return id;
+  }
+
+  /** 写回 faqs.json 并立即重建索引（文件 watcher 也会触发防抖重载，双保险）。 */
+  private async persistFaqs(): Promise<void> {
+    await fs.writeFile(path.join(this.dataDir, 'faqs.json'), JSON.stringify(this.faqs, null, 2) + '\n', 'utf8');
+    await this.load();
+  }
+
+  /** 运营列表：支持关键词 q（问题/关键词模糊）与 intent 精确筛选。 */
+  searchFaqsAdmin(q?: string, intent?: string): Faq[] {
+    const keyword = String(q ?? '').trim().toLowerCase();
+    const intentFilter = String(intent ?? '').trim();
+    return this.faqs.filter((f) => {
+      if (intentFilter && f.intent !== intentFilter) return false;
+      if (!keyword) return true;
+      return (
+        f.question.toLowerCase().includes(keyword) ||
+        f.keywords.some((k) => k.toLowerCase().includes(keyword))
+      );
+    });
+  }
+
+  async createFaq(input: any): Promise<Faq> {
+    const clean = KnowledgeService.sanitizeFaqInput(input);
+    const faq: Faq = { id: this.generateFaqId(), ...clean };
+    this.faqs.push(faq);
+    await this.persistFaqs();
+    return faq;
+  }
+
+  /** 返回 null 表示 id 不存在。 */
+  async updateFaq(id: string, input: any): Promise<Faq | null> {
+    const idx = this.faqs.findIndex((f) => f.id === id);
+    if (idx < 0) return null;
+    const clean = KnowledgeService.sanitizeFaqInput({ ...this.faqs[idx], ...input });
+    this.faqs[idx] = { ...this.faqs[idx], ...clean };
+    await this.persistFaqs();
+    return this.faqs[idx];
+  }
+
+  /** 返回 false 表示 id 不存在。 */
+  async deleteFaq(id: string): Promise<boolean> {
+    const idx = this.faqs.findIndex((f) => f.id === id);
+    if (idx < 0) return false;
+    this.faqs.splice(idx, 1);
+    await this.persistFaqs();
+    return true;
+  }
+
+  /**
+   * 导入 FAQ：replace 整包替换；merge 按 id upsert（id 存在则更新，不存在则追加）。
+   * 返回当前总条数。
+   */
+  async importFaqs(items: any, mode: 'replace' | 'merge' = 'merge'): Promise<{ count: number }> {
+    if (!Array.isArray(items)) throw new Error('faqs 必须是数组');
+    if (items.length > 2000) throw new Error('单次导入最多 2000 条');
+    const cleaned = items.map((item) => {
+      const clean = KnowledgeService.sanitizeFaqInput(item);
+      const id = String(item?.id ?? '').trim();
+      return { ...clean, id: id || '' };
+    });
+    if (mode === 'replace') {
+      const seen = new Set<string>();
+      this.faqs = cleaned.map((c) => {
+        let id = c.id;
+        if (!id || seen.has(id)) id = this.generateFaqId();
+        seen.add(id);
+        return { ...c, id };
+      });
+    } else {
+      for (const c of cleaned) {
+        const idx = c.id ? this.faqs.findIndex((f) => f.id === c.id) : -1;
+        if (idx >= 0) {
+          this.faqs[idx] = { ...this.faqs[idx], ...c };
+        } else {
+          const id = c.id || this.generateFaqId();
+          this.faqs.push({ ...c, id });
+        }
+      }
+    }
+    await this.persistFaqs();
+    return { count: this.faqs.length };
+  }
+
   /** 监听全部知识库数据文件；任一变更触发防抖重载（500ms）。 */
   private watchDataFiles(): void {
     for (const file of DATA_FILES) {
       try {
-        const watcher = watch(path.join(appConfig.dataDir, file), () => this.scheduleReload(file));
+        const watcher = watch(path.join(this.dataDir, file), () => this.scheduleReload(file));
         this.watchers.push(watcher);
       } catch {
         // 文件不存在或平台不支持 watch 时静默降级
