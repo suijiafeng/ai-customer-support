@@ -306,20 +306,38 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
               onPointerCancel={onHeadUp}
             >
               <span className="title">
-                {displayTitle}
-               {!mobile&&<span className={`sub ${connection === 'synced' ? 'ok' : 'busy'}`}>
-                  <span className="dot" />
-                  {connection === 'synced' ? '消息已同步' : '正在同步'}
-                </span>}
+                <span className="logo" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="13" y2="12"/></svg>
+                </span>
+                <span className="title-text">
+                  <span className="title-name">{displayTitle}</span>
+                  {!mobile && <span className={`sub ${connection === 'synced' ? 'ok' : 'busy'}`}>
+                    <span className="dot" />
+                    {connection === 'synced' ? '消息已同步' : '正在同步'}
+                  </span>}
+                </span>
               </span>
               <button className="x" onClick={toggle} aria-label="关闭">×</button>
             </div>
             <div className="list-wrap">
               <div className="list" ref={listEl} onScroll={onListScroll}>
                 {messages.length === 0 && (
-                  <div className="hint">
-                    你好呀，我是开发者的智能助手<br />有什么想了解的直接问我，或点下方快捷提问
-                  </div>
+                  <>
+                    <div className="hint">
+                      你好呀，我是开发者的智能助手<br />有什么想了解的直接问我，或点下方快捷提问
+                    </div>
+                    {/* 快捷提问平铺成标签：点击填入输入框（与工具栏里的快捷提问弹层行为一致） */}
+                    <div className="quick-chips" aria-label="快捷提问">
+                      <span className="quick-chips-label">快捷提问</span>
+                      <div className="quick-chips-row">
+                        {QUICK_MESSAGES.map((text) => (
+                          <button key={text} type="button" className="quick-chip" onClick={() => { setInput(text); taEl.current?.focus(); }}>
+                            {text}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
                 )}
                 {messages.map((m) => (
                   <div key={m.id} className={`row ${m.from}`}>
