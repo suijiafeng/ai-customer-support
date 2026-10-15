@@ -387,3 +387,7 @@ docker compose up --build
 
 ---
 > **声明**：本仓库为个人项目，仅供学习交流。
+
+## License
+
+MIT
