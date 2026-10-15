@@ -384,3 +384,6 @@ docker compose up --build
 默认持久化用本地 Postgres（`DATABASE_URL` 按 `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` 自动拼好，连到 compose 里的 `postgres` 服务）。想接外部 Postgres（Neon/Supabase）就设 `DATABASE_URL` 覆盖；想改回零配置 SQLite 就设 `DB_DRIVER=sqlite`（此时可以从 `docker-compose.yml` 里去掉 `postgres` 服务与 `server` 的 `depends_on`）。
 
 其余可覆盖的环境变量：构建时注入的跨服务地址 `WORKSTATION_API_BASE`、`DEMO_WIDGET_SRC`、`DEMO_API_BASE`、`DEMO_WORKSTATION_URL`（默认已指向上面几个本地端口）；透传给 server 的 `AI_ENABLED`/`AI_PROVIDER`/`AI_API_KEY`/`AI_BASE_URL`/`AI_MODEL`。生产场景仍建议按上面「拆分部署」把 workstation/widget/demo 放到 CDN。
+
+---
+> **声明**：本仓库为个人项目，仅供学习交流。
