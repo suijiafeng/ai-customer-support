@@ -1,10 +1,12 @@
 # AssistFlow
 
-独立前端开发者个人主页 AI 助手。访客可以了解开发服务、报价方式、合作流程、技术栈、作品集、档期、招聘合作和个人背景，也可以通过项目或咨询编号查询公开进展。
+AssistFlow 是一套全栈客服 Chat 系统（本仓库 [`suijiafeng/ai-customer-support`](https://github.com/suijiafeng/ai-customer-support)）。代码和界面使用这个产品名：访客 widget 可以嵌到任意网站，客服在工作台接待，NestJS 提供 API，并在同一进程里托管三套前端产物。
 
-项目默认使用本地 FAQ，不依赖外部模型。只有访客明确要求“转人工”（转人工 / 找人工 / 真人沟通）时，系统才会创建跟进事项并进入本人沟通流程。
+项目默认使用本地 FAQ，不调用外部模型。只有访客明确要求“转人工”（转人工 / 找人工 / 真人沟通）时，系统才会创建跟进事项并进入人工接待。
 
-[![CI](https://github.com/suijiafeng/ai-customer-support-chat/actions/workflows/ci.yml/badge.svg)](https://github.com/suijiafeng/ai-customer-support-chat/actions/workflows/ci.yml)
+随仓库附带的演示知识库，写成独立前端开发者的站点文案：开发服务、报价方式、合作流程、技术栈、作品集、档期、招聘合作和个人背景，以及按项目或咨询编号查询的公开进展。换行业时改 `apps/server/data/` 里的 JSON。
+
+[![CI](https://github.com/suijiafeng/ai-customer-support/actions/workflows/ci.yml/badge.svg)](https://github.com/suijiafeng/ai-customer-support/actions/workflows/ci.yml)
 ![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-2f855a)
 ![SSE](https://img.shields.io/badge/realtime-SSE-2457c5)
 ![Local FAQ](https://img.shields.io/badge/default-local%20FAQ-f59e0b)
@@ -40,25 +42,27 @@ npm install
 npm run start -- dev
 ```
 
-启动后可直接访问：
+`dev` 会先执行 `predev:all`（构建全部 5 个包），再启动 shared、server 编译、server 进程、widget、workstation。启动后可直接访问：
 
-- Widget 演示页：`http://localhost:5175/`
-- 工作台：`http://localhost:5174/`
+- Widget 开发预览：`http://localhost:5173/`
+- 客服工作台（热更新）：`http://localhost:5174/`（工号 `9527`，密码 `123456`）
+- 已构建的演示站：`http://localhost:3001/`
 - 健康检查：`http://localhost:3001/api/health`
 
-> 若你使用 `npm run start`（prod）并遇到端口占用，可改用 `npm run start -- dev`，
-> 或在截图命令里通过 `--base` 指向当前可访问地址（如 `http://localhost:3002`）。
+演示站自己的 Vite 监听 `5175`。`npm run start -- dev` 的热更新入口是 5173 和 5174；要用 5175 看演示站，运行 `npm run start -- demo`。
+
+服务端口默认 `3001`，用环境变量 `PORT` 修改。截图脚本 `npm run shots` 可用 `--base` 指向当前可访问地址。
 
 ## 核心场景
 
-负面情绪、投诉、知识库未命中和查询不到编号都不会自动转本人。系统会继续使用 FAQ 回答，或提示访客补充信息。
+负面情绪、投诉、知识库未命中和查询不到编号都不会自动转人工。系统会继续使用 FAQ 回答，或提示访客补充信息。
 
 ## 仓库结构（monorepo）
 
 ```
 packages/shared        前后端共享的 TS 类型与常量
 apps/server            NestJS 后端（API + 静态产物托管）
-apps/workstation       React 开发者工作台
+apps/workstation       React 客服工作台
 apps/widget            React 嵌入式聊天组件（构建为单文件 widget.js）
 apps/demo              演示站（widget 嵌入演示，仅消费产物与公开 API）
 ```
@@ -74,8 +78,8 @@ apps/demo              演示站（widget 嵌入演示，仅消费产物与公�
 | `9529` | 客服9529 | `123456` | 普通客服 |
 
 - 角色写入 JWT：管理员可见/可操作全部会话与工单；普通客服只看「接待大厅 + 自己接待的」。
-- 客服侧接口（队列、回复、工单、指标）要求 `Authorization: Bearer <token>`；SSE 通过 `?token=` 传递。
-- 会话详情与会话 SSE 做可选鉴权：带客服 token 的非归属者（且非管理员）返回 403；不带 token 的访客（widget）正常放行。
+- 客服侧接口（队列、回复、工单、指标）要求 `Authorization: Bearer <token>`。SSE 不能自定义请求头：工作台先 `POST /api/auth/sse-ticket` 换一张 60 秒短票据，再用 `?ticket=` 连接（长效 JWT 不放进 URL）。
+- 会话详情与会话 SSE：客服走上述身份，带客服票据的非归属者（且非管理员）返回 403。访客必须出示该会话的访客令牌（见下一节）。
 - 客服身份只来自已验证 token，请求体里的身份字段不再被信任。
 - 生产部署请设置环境变量 `AUTH_SECRET`（JWT 签名密钥）。
 
@@ -100,14 +104,17 @@ apps/demo              演示站（widget 嵌入演示，仅消费产物与公�
 - 未被认领（`assignedAgentId` 为空）且未关闭的会话进入「接待大厅」，对所有客服可见。
 - **发首条消息即接待**：客服回复后该会话归为自己的，从接待大厅消失，进入「我的会话」；其他普通客服不再可见。并发下后到者收到 409。
 - 跟进事项（工单）归属随会话：普通客服只看「自己的 + 未认领」，管理员看全部；改状态/优先级、加备注需归属人或管理员。
-- 数据看板用 ECharts 展示饼图（会话状态）/柱状图（待办负载）/折线图（按本地日期的每日趋势，存于浏览器本地）。
+- 数据概览有指标条、会话构成（横向堆叠条）和 ECharts 折线。每日趋势由服务端按本地日期写入持久化后端（约每 30 分钟一条，`GET /api/metrics/trend` 返回近 14 天），各端看到同一份数据。`DB_DRIVER=memory` 时重启后趋势清空。
 
 ## 入口
 
+下面是 NestJS 托管时的地址（`npm run start`、默认 Docker 镜像，以及 `npm run start -- dev` 完成预构建之后）。改 widget 或工作台源码时用开发服务器 `5173` / `5174`。
+
 | 页面 | 本地地址 | 用途 |
 |------|----------|------|
-| Widget 嵌入演示 | http://localhost:3001/ | 模拟第三方网站嵌入 widget |
-| 开发者工作台 | http://localhost:3001/workstation/ | React 会话工作台 |
+| Widget 嵌入演示 | http://localhost:3001/ | 模拟第三方网站嵌入 widget（构建产物） |
+| 客服工作台 | http://localhost:3001/workstation/ | 构建产物；热更新用 http://localhost:5174/ |
+| 嵌入脚本 | http://localhost:3001/widget/widget.js | 单文件 widget |
 | 健康检查 | http://localhost:3001/api/health | 服务、FAQ 和项目咨询数据状态 |
 
 ## 运行（三套环境）
@@ -135,17 +142,26 @@ npm run start -- demo   # 演示模式（build 产物 + vite preview 模拟第�
 npm run start -- dev    # 等价于 npm run dev:all
 ```
 
-一条命令并行启动 5 个进程（首次会自动预构建 shared 与 widget）：
+`npm run dev:all` 会先跑 `predev:all`，按顺序构建全部 5 个包：`@assistflow/shared`、`@assistflow/server`、`assistflow-widget`、`assistflow-workstation`、`assistflow-demo`。构建结束后并行启动下面 5 个进程（名称与 `package.json` 里 `concurrently -n` 一致）。演示站 Vite 要另外启动，见本节末尾：
 
 | 进程 | 说明 |
 |------|------|
 | shared | `tsc --watch`，类型/常量改动自动重编译并传导到前后端 |
-| server | `tsc --watch` + `node --watch`，改 `.ts` 自动重编译重启（http://localhost:3001） |
+| server-tsc | `tsc --watch`，改 `apps/server` 的 `.ts` 自动重编译 |
+| server-node | `node --watch` 运行已编译服务（http://localhost:3001） |
 | widget | Vite dev（http://localhost:5173，模拟宿主预览页） |
 | workstation | Vite dev（http://localhost:5174，登录 9527/123456） |
-| demo | Vite dev（http://localhost:5175，/widget 与 /workstation 代理到 3001） |
 
-三个前端的 `/api` 都代理到 3001，SSE / 登录在 dev 下可直接使用。
+预构建产物会被 server 托管：`/` 演示站、`/workstation/` 工作台、`/widget/widget.js`。这三处是构建结果，改源码不会热更新。widget（5173）和工作台（5174）把 `/api` 代理到 3001，SSE 和登录可以直接用。
+
+演示站热更新或 `vite preview` 另说：
+
+```bash
+npm run dev --workspace assistflow-demo   # Vite dev，http://localhost:5175
+npm run start -- demo                     # 先 build，server + vite preview（5175）
+```
+
+demo 的 Vite 把 `/api`、`/widget`、`/workstation` 代理到 3001。
 
 ### 2. 演示环境（单机以生产形态跑构建产物）
 
@@ -156,12 +172,13 @@ npm run start       # NestJS 托管 API + 三套前端产物，http://localhost:
 
 - 入口：`/`（widget 嵌入演示）、`/workstation/`（客服工作台）、`/widget/widget.js`（嵌入脚本）。
 - 默认使用本地 SQLite 持久化（`apps/server/data/assistflow.db`），重启不丢；纯内存调试可设 `DB_DRIVER=memory`。
-- 建议在 `.env.local` 中设置 `AUTH_SECRET`（`openssl rand -hex 32`），避免使用内置开发密钥。
+- 建议在 `.env.local` 中设置 `AUTH_SECRET`（`openssl rand -hex 32`）。未设置时进程会生成随机密钥并写入 `DATA_DIR/.auth_secret`，单机重启可以复用；多实例请设成同一个值。
 
 ### 3. 生产环境（Docker / Render）
 
 ```bash
 # 本地或自托管：构建并运行生产镜像（挂卷以持久化 SQLite）
+# 这是一体化镜像：默认同时托管 API、演示站、widget 和工作台
 docker build -t assistflow .
 docker run -d --name assistflow -p 3001:3001 \
   -v assistflow_data:/data \
@@ -175,7 +192,7 @@ docker run -d --name assistflow -p 3001:3001 \
   - **Postgres**：设置 `DATABASE_URL`（Neon/Supabase 等），会话/消息/工单写穿透入库。
   - **memory**：`DB_DRIVER=memory`，纯内存、重启清空。
 - **Render**：推送到 main 后按 `render.yaml` 自动 Docker 部署；`AUTH_SECRET` 由 Render 自动生成。注意 Render 文件系统是临时的（free 无持久磁盘），SQLite 重新部署会清空——要持久化请填 `DATABASE_URL` 用外部 Postgres，或付费挂 Disk 到 `/data`。
-- 生产强制要求 `AUTH_SECRET`（`NODE_ENV=production` 且缺失时拒绝启动）。
+- 生产环境未设置 `AUTH_SECRET` 时照常启动，并自动生成密钥、打印告警。多实例或正式环境仍应显式设置，否则各进程签发的 token 互不认。`NODE_ENV=production` 还会收紧接口错误详情，并在账号仍是演示弱口令时打错误日志。
 - 健康检查：`/api/health`（Render 用 healthCheckPath，本地 docker 用镜像内 HEALTHCHECK）。
 - CI 会构建生产镜像并启动验证健康检查，保证 Dockerfile 不漂移。
 
@@ -191,13 +208,19 @@ docker run -d --name assistflow -p 3001:3001 \
 | `HANDOFF_IDLE_RELEASE_MINUTES` | `10` | 人工接管后客服静默多久自动把会话交还 AI；`0` = 永不交还 |
 | `HANDOFF_NOTICE_COOLDOWN_MINUTES` | `5` | 接管期间「客服已接入」系统提示的最小间隔 |
 | `PORT` | `3001` | 服务监听端口 |
-| `AUTH_SECRET` | 开发默认值 | 客服 JWT 签名密钥；**生产必须设置**（缺失拒绝启动） |
+| `AUTH_SECRET` | 未设置则自动生成 | 客服 JWT、SSE 票据、访客令牌的签名密钥。优先读环境变量；否则读 `DATA_DIR/.auth_secret`，没有就生成并尝试写入该文件（重启复用）。写失败则只存在本次进程内存，重启后客服需重新登录。生产环境缺失时照常启动并告警。多实例必须设成同一个值 |
 | `DB_DRIVER` | 自动推断 | 持久化后端：`sqlite`（默认）/ `postgres` / `memory`；不设时配了 `DATABASE_URL` 走 postgres，否则 sqlite |
 | `DATABASE_URL` | — | Postgres 连接串（设置即用 Postgres） |
 | `SQLITE_PATH` | `DATA_DIR/assistflow.db` | SQLite 库文件路径（Docker 镜像内为 `/data/assistflow.db`） |
 | `DATA_DIR` | `apps/server/data` | faqs/inquiries/agents 数据目录 |
-| `NODE_ENV` | — | `production` 时收紧错误信息并强制 AUTH_SECRET |
+| `NODE_ENV` | — | `production` 时收紧接口错误详情；未显式设置 `AUTH_SECRET` 或账号仍为演示弱口令时打日志 |
+| `TRUST_PROXY` | 空（不信任转发头） | 传给 Express `trust proxy`。空字符串为 `false`，不读取 `x-forwarded-*`，访客 IP 只用直连 `req.ip`。`true` / `false` 按布尔解析，纯数字（如 `1`）是代理层数，其他字符串原样交给 Express（如 `loopback`）。`render.yaml` 设为 `1` |
+| `CORS_ORIGINS` | 空（不限制来源） | 逗号分隔的来源白名单。留空时 `enableCors({})`，`cors` 默认来源为 `*`，任意网站上的 widget 都能调用 `/api/chat`。设置后只放行列出的源，并允许请求头 `Authorization`、`Content-Type`、`x-visitor-token`，方法为 `GET` / `POST` / `PATCH` / `DELETE` / `OPTIONS` |
+| `ALLOW_ANON_SESSION_READ` | 关闭 | 只有值严格等于 `true` 时，才放行不带访客令牌的会话读取和续写，给旧版 widget 灰度。`1`、`yes` 不会打开。线上 widget 升级后应关闭 |
 | `ALERT_WEBHOOK_URL` | — | 持久化写入失败时的告警 webhook（接受 JSON POST `{ text }`，如 Slack Incoming Webhook）；留空不告警，同一 5 分钟窗口内最多触发一次 |
+| `DEMO_ENABLED` | `true` | 是否由 NestJS 托管根路径演示站。`false` 时 `/` 不再返回演示页，`/api` 不受影响 |
+| `WIDGET_ENABLED` | `true` | 是否托管 `/widget`（嵌入脚本 `widget.js`） |
+| `WORKSTATION_ENABLED` | `true` | 是否托管 `/workstation/` 客服工作台 |
 
 所有厂商都走 OpenAI 兼容协议，只需一套 `AI_*` 变量。`AI_PROVIDER` 选中预设后即可只填 `AI_API_KEY`：
 
@@ -219,6 +242,8 @@ docker run -d --name assistflow -p 3001:3001 \
 
 
 > 配置文件：安全兜底值内置在 `apps/server/src/config.ts`，仓库里只提交 `.env.example` 作为说明模板；私有配置与密钥写入 `.env.local`（`.env.local`、`.env` 均已 gitignore）。加载优先级：真实环境变量 > `.env.local` > `.env`。SQLite 默认启用，需 Node 以 `--experimental-sqlite` 启动（`npm run start` 与 Docker 镜像已自动带上）。
+>
+> `DEMO_ENABLED`、`WIDGET_ENABLED`、`WORKSTATION_ENABLED`、`AI_ENABLED` 用同一套布尔解析：未设置或空字符串取上表默认值；`1` / `true` / `yes` / `on` 为开，其余值（含 `false`、`0`）为关。`.env.example` 注释里的 `github` 厂商预设已从代码移除，`AI_PROVIDER=github` 不会命中上表。
 
 设置 `AI_ENABLED=true` 且配置对应 API Key 后，FAQ 会作为模型回答上下文。模型失败时仍会自动降级到本地 FAQ。
 
@@ -249,7 +274,7 @@ FAQ 位于 `apps/server/data/faqs.json`：
 }
 ```
 
-修改数据后需要重启服务。
+`faqs.json`、`inquiries.json`、`small-talk.json` 有文件监听，保存后约 500ms 热加载（解析失败则保留旧数据）。工作台「知识库」写入 FAQ 会立刻重建索引。`business-terms.json`、`reply-templates.json`、`fallback-scripts.json` 在进程启动时读取，改这三份需要重启。
 
 ### 知识库治理（建议）
 
@@ -286,12 +311,11 @@ flowchart LR
   A["访客发送消息"] --> B["意图识别 / FAQ 检索 / 项目咨询查询"]
   B --> C{"明确要求转人工?"}
   C -- 否 --> D["本地 FAQ 或可选 AI 回复"]
-  C -- 是 --> E["建立跟进事项"]
-  D --> F["保存消息与会话"]
+  C -- 是 --> E["建立跟进事项，等待人工"]
+  D --> F["保存消息，SSE 同步访客页与客服工作台"]
   E --> F
-  F --> G["SSE 同步访客页与开发者工作台"]
-  G --> H["人工客服接入"]
-  H --> I["AI 静默，进入本人沟通"]
+  E --> H["客服发出首条回复即接管，AI 静默"]
+  H --> I["客服静默超过阈值后可交还 AI"]
 ```
 
 ## API 概览
@@ -301,12 +325,13 @@ GET  /api/health                    服务、AI、FAQ 和项目咨询数据状�
 GET  /api/faqs                      本地 FAQ
 GET  /api/sessions                  会话队列（按客服归属过滤：管理员看全部）
 GET  /api/sessions/events           SSE：队列实时推送（按订阅者归属过滤）
-GET  /api/sessions/:id              单个会话详情（带 token 的非归属者 403）
-GET  /api/sessions/:id/events       SSE：会话实时推送（同上可选鉴权）
+GET  /api/sessions/:id              单个会话详情（访客令牌或客服票据；非归属客服 403）
+GET  /api/sessions/:id/events       SSE：会话实时推送（鉴权同上）
 GET  /api/tickets                   跟进事项列表（普通客服只看 自己的 + 未认领）
 GET  /api/metrics                   运营指标
 
 POST /api/auth/login                客服登录（工号+密码 → JWT，含角色）
+POST /api/auth/sse-ticket           用客服 JWT 换 60 秒 SSE 票据（?ticket=）
 POST /api/chat                      访客发送消息
 POST /api/sessions/:id/messages     客服回复（需 JWT；首条消息即接待该会话）
 POST /api/sessions/:id/profile      更新访客资料（需 JWT，归属人/管理员）
@@ -331,20 +356,23 @@ node scripts/dialog-test.js    # 访客↔客服对话时序回归
 ## 当前限制
 
 - 运行时以内存为事实来源，写穿透到持久化后端（默认 SQLite，可切 Postgres / memory）。
-- 每日趋势图基于浏览器 localStorage 累积、按本地日期分桶，故各端各自独立、清缓存即重置。
+- 每日趋势是服务端按本地日期写入持久化后端的快照（约每 30 分钟）。`DB_DRIVER=memory` 时重启即清空。
 - FAQ 使用关键词和字符匹配，不是语义向量检索。
-- 客服账号为静态配置（agents.json），暂无账号管理界面。
+- 演示账号种子在 `apps/server/data/agents.json`。管理员可在工作台「用户管理」增删改、启停和重置密码（写回同一文件并立即生效）。直接改这个文件不会热加载，需要重启。生产环境请换掉演示弱口令。
 - 图片附件当前使用 Base64 存储，不适合生产环境。
 
 ## 部署
 
-仓库包含 `Dockerfile` 和 `render.yaml`。部署时默认使用本地 FAQ；如需启用模型，在平台环境变量中设置 `AI_ENABLED=true` 和对应 API Key。
+仓库包含根目录 `Dockerfile`、各前端的 `apps/*/Dockerfile`、`docker-compose.yml` 和 `render.yaml`。部署时默认使用本地 FAQ；如需启用模型，在平台环境变量中设置 `AI_ENABLED=true` 和对应 API Key。
 
-默认 `Dockerfile` 只构建 server（纯 API），widget/workstation/demo 不在镜像里，需要按下面的方式各自独立部署。
+两种部署方式：
+
+1. **一体化**。根目录 `Dockerfile` 在同一镜像里构建 server、demo、widget、workstation。容器内的 NestJS 按 `DEMO_ENABLED`、`WIDGET_ENABLED`、`WORKSTATION_ENABLED` 决定是否托管这三套静态产物，三个都默认 `true`。`docker run` 与 `npm run start` 的入口相同：`http://localhost:3001/` 是演示站，`/workstation/` 是工作台，`/widget/widget.js` 是嵌入脚本，`/api/*` 是接口。只暴露 API 时把三个开关设为 `false`，镜像不用重打。
+2. **拆分**。前端各自构建、独立托管，server 只提供 API。`docker-compose.yml` 采用这种方式：server 仍用根目录 `Dockerfile`，但把三个静态站点默认关掉；workstation、widget、demo 用 `apps/*/Dockerfile` 打成 nginx 镜像。前端也可以放到 Cloudflare Pages、Vercel、Netlify 等静态托管。
 
 ### 拆分部署（server / workstation / widget / demo 各自独立）
 
-**server**：按上面的 Docker 说明构建部署即可（`docker build` 用的就是收窄后的 server-only 镜像）。CORS 默认全开，**不建议收紧 `CORS_ORIGINS`**——`/api/chat` 需要能被任意第三方网站的 widget 跨域调用，收紧会连带堵死这个能力。
+**server**：用根目录 `Dockerfile` 构建（镜像里带有三套前端产物），运行时设置 `DEMO_ENABLED=false`、`WIDGET_ENABLED=false`、`WORKSTATION_ENABLED=false`，只留 API。CORS 默认全开。公开 widget 需要从任意第三方网站调用 `/api/chat`，收紧 `CORS_ORIGINS` 时要把这些网站的来源写进白名单，否则嵌入会跨域失败。
 
 **workstation**（客服工作台）：在静态托管平台（Cloudflare Pages / Vercel / Netlify 等）连接本仓库，配置：
 - 构建命令：`npm ci && npm run build --workspace @assistflow/shared && npm run build --workspace assistflow-workstation`（必须从仓库根目录跑 `npm ci`，让 npm workspaces 的符号链接生效）
@@ -367,7 +395,7 @@ node scripts/dialog-test.js    # 访客↔客服对话时序回归
 
 ### 一键自托管（docker compose）
 
-不想分别推到多个静态托管平台时，可以用 `docker-compose.yml` 在同一台机器上把 postgres + 四个部分作为独立容器跑起来（server 仍是纯 API，workstation/widget/demo 各自 nginx 托管静态产物；持久化默认用 compose 里自带的 Postgres）：
+不想分别推到多个静态托管平台时，可以用 `docker-compose.yml` 在同一台机器上把 postgres 和四个部分作为独立容器跑起来。server 容器用的仍是根目录一体化镜像，compose 把 `DEMO_ENABLED`、`WIDGET_ENABLED`、`WORKSTATION_ENABLED` 默认设为 `false`，所以这个容器只提供 API；workstation、widget、demo 各自用 nginx 托管静态产物。持久化默认用 compose 里自带的 Postgres：
 
 ```bash
 export AUTH_SECRET=$(openssl rand -hex 32)
