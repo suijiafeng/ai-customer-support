@@ -95,6 +95,64 @@ test('更新不存在的账号返回 null，删除不存在的返回 false', asy
   } finally { await teardown(svc, dir); }
 });
 
+test('停用、降级、删除后已签发 token 立即失效，角色以当前账号为准', async () => {
+  const { svc, dir } = await makeService([
+    account('admin', '管理员', 'admin'),
+    account('admin2', '副管', 'admin'),
+    account('kefu01', '小王', 'agent'),
+  ]);
+  try {
+    const adminLogin = svc.login('admin', 'password123');
+    const agentLogin = svc.login('kefu01', 'password123');
+    assert.equal(svc.verify(adminLogin.token).role, 'admin');
+    const ticket = svc.issueSseTicket(agentLogin.agent);
+    assert.equal(svc.verifySseTicket(ticket).role, 'agent');
+
+    await svc.updateAgent('admin', { role: 'agent' }, 'admin2');
+    assert.equal(svc.verify(adminLogin.token).role, 'agent');
+    await svc.updateAgent('admin', { name: '已改名' }, 'admin2');
+    assert.equal(svc.verify(adminLogin.token).name, '已改名');
+
+    await svc.updateAgent('kefu01', { active: false }, 'admin2');
+    assert.equal(svc.verify(agentLogin.token), null);
+    assert.equal(svc.verifySseTicket(ticket), null);
+
+    assert.equal(await svc.deleteAgent('admin', 'admin2'), true);
+    assert.equal(svc.verify(adminLogin.token), null);
+  } finally { await teardown(svc, dir); }
+});
+
+test('生产环境拒绝已公开的演示口令，开发环境与显式开关不受影响', async () => {
+  const prevEnv = process.env.NODE_ENV;
+  const prevAllow = process.env.ALLOW_DEMO_CREDENTIALS;
+  const { svc, dir } = await makeService([
+    account('9527', '客服9527', 'admin', '123456'),
+    account('admin', '管理员', 'admin', 'password123'),
+  ]);
+  try {
+    process.env.NODE_ENV = 'production';
+    delete process.env.ALLOW_DEMO_CREDENTIALS;
+    assert.equal(svc.login('9527', '123456'), null);
+    assert.ok(svc.login('admin', 'password123'));
+
+    process.env.ALLOW_DEMO_CREDENTIALS = 'true';
+    assert.equal(svc.login('9527', '123456').agent.role, 'admin');
+
+    process.env.ALLOW_DEMO_CREDENTIALS = 'false';
+    assert.equal(svc.login('9527', '123456'), null);
+
+    process.env.NODE_ENV = 'development';
+    delete process.env.ALLOW_DEMO_CREDENTIALS;
+    assert.equal(svc.login('9527', '123456').agent.id, '9527');
+  } finally {
+    if (prevEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = prevEnv;
+    if (prevAllow === undefined) delete process.env.ALLOW_DEMO_CREDENTIALS;
+    else process.env.ALLOW_DEMO_CREDENTIALS = prevAllow;
+    await teardown(svc, dir);
+  }
+});
+
 test('改密码后旧密码失效、新密码可用', async () => {
   const { svc, dir } = await makeService([
     account('admin', '管理员', 'admin'),

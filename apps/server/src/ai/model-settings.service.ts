@@ -16,7 +16,10 @@ export interface ModelEntry {
   baseUrl: string;
   /** 模型 ID，如 deepseek-chat */
   model: string;
-  /** 专属 API Key；空串 = 回退环境变量。只写不读，接口永不回传明文 */
+  /**
+   * 专属 API Key；空串 = 在受信任地址上回退环境变量。
+   * 自定义接口地址不会回退，避免把服务器 Key 发到管理员填写的 URL。只写不读，接口永不回传明文。
+   */
   apiKey: string;
   enabled: boolean;
   createdAt: string;
@@ -130,9 +133,46 @@ function envKeyFor(provider: string): string {
   return env[vendorVar] || env.AI_API_KEY || env.OPENAI_API_KEY || env.DEEPSEEK_API_KEY || '';
 }
 
+/**
+ * 协议 + 主机 + 端口。路径忽略（官方地址常带或不带 /v1），用户名密码一律视为不可信。
+ * 返回 null 表示无法当成允许列表中的端点（非法 URL、非 http(s)、带 userinfo）。
+ */
+function endpointIdentity(raw: string): string | null {
+  let parsed: URL;
+  try { parsed = new URL(raw.trim()); } catch { return null; }
+  if (parsed.username || parsed.password) return null;
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+  const host = parsed.hostname.toLowerCase();
+  if (!host) return null;
+  const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+  return `${parsed.protocol}//${host}:${port}`;
+}
+
+/**
+ * 可以附带服务器环境变量 Key 的地址：留空（跟随厂商预设 / 进程启动时的 AI_BASE_URL），
+ * 或与该厂商官方预设、OpenAI SDK 默认主机、本进程为该厂商解析出的 AI_BASE_URL 同一协议+主机+端口。
+ * 管理员填写的其他地址一律不可信，必须自带 Key。
+ */
+export function isTrustedModelBaseUrl(provider: string, baseUrl: string): boolean {
+  if (!baseUrl.trim()) return true;
+  const target = endpointIdentity(baseUrl);
+  if (!target) return false;
+  const allowed: string[] = [];
+  const preset = AI_PROVIDER_PRESETS[provider];
+  if (preset?.baseUrl) allowed.push(preset.baseUrl);
+  // openai 预设 baseUrl 为空，SDK 默认打到官方 API
+  if (provider === 'openai') allowed.push('https://api.openai.com/v1');
+  if (provider === appConfig.aiProvider && appConfig.aiBaseUrl) allowed.push(appConfig.aiBaseUrl);
+  return allowed.some((url) => endpointIdentity(url) === target);
+}
+
 /** Key 来源：custom=本条专属；env=环境变量；optional=本地服务无需 Key；none=未配置 */
 export function keySourceOf(entry: ModelEntry): 'custom' | 'env' | 'optional' | 'none' {
   if (entry.apiKey) return 'custom';
+  // 自定义地址不会使用环境变量 Key，避免列表把「未配置」显示成「环境变量」
+  if (!isTrustedModelBaseUrl(entry.provider, entry.baseUrl)) {
+    return AI_PROVIDER_PRESETS[entry.provider]?.keyOptional ? 'optional' : 'none';
+  }
   if (AI_PROVIDER_PRESETS[entry.provider]?.keyOptional) return 'optional';
   return isProviderKeyConfigured(entry.provider) ? 'env' : 'none';
 }
@@ -289,6 +329,7 @@ export class ModelSettingsService implements OnModuleInit, OnModuleDestroy {
   /**
    * 指定模型的连接参数（租户专属模型）；模型不存在或已停用时回退默认模型，保证回复不中断。
    * 接口地址 / Key 留空时回退厂商预设与环境变量。
+   * 自定义接口地址只使用本条专属 Key（本地无需鉴权的服务用占位串），绝不附带服务器环境变量 Key。
    */
   getConnectionFor(id?: string | null): ActiveConnection {
     const picked = id ? this.settings.models.find((m) => m.id === id && m.enabled) : undefined;
@@ -304,8 +345,13 @@ export class ModelSettingsService implements OnModuleInit, OnModuleDestroy {
     const preset = AI_PROVIDER_PRESETS[e.provider];
     const baseUrl =
       e.baseUrl || (e.provider === appConfig.aiProvider ? appConfig.aiBaseUrl : '') || preset?.baseUrl || '';
-    const apiKey = e.apiKey || envKeyFor(e.provider) || (preset?.keyOptional ? 'local' : '');
-    return { id: e.id, provider: e.provider, model: e.model, baseUrl, apiKey };
+    let apiKey = e.apiKey;
+    // 只有受信任地址才能回退到服务器 Key。磁盘上已有的自定义地址即使绕过了写入校验，也不会把 Key 送出去。
+    if (!apiKey && isTrustedModelBaseUrl(e.provider, e.baseUrl)) {
+      apiKey = envKeyFor(e.provider);
+    }
+    if (!apiKey && preset?.keyOptional) apiKey = 'local';
+    return { id: e.id, provider: e.provider, model: e.model, baseUrl, apiKey: apiKey || '' };
   }
 
   // ---------- 写 ----------
@@ -343,6 +389,9 @@ export class ModelSettingsService implements OnModuleInit, OnModuleDestroy {
         if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
           throw new ModelSettingsError('接口地址只支持 http / https');
         }
+        if (parsed.username || parsed.password) {
+          throw new ModelSettingsError('接口地址不能包含用户名或密码');
+        }
       }
       target.baseUrl = u;
     }
@@ -360,6 +409,11 @@ export class ModelSettingsService implements OnModuleInit, OnModuleDestroy {
     }
     if (input.enabled !== undefined) {
       target.enabled = Boolean(input.enabled);
+    }
+    // 放在 Key 合并之后：自定义地址必须自带 Key，不能靠环境变量把服务器 Key 送到任意 URL。
+    // 无需鉴权的本地服务（Ollama）例外，连接时只用占位串，同样不会附带服务器 Key。
+    if (!isTrustedModelBaseUrl(target.provider, target.baseUrl) && !target.apiKey && !AI_PROVIDER_PRESETS[target.provider]?.keyOptional) {
+      throw new ModelSettingsError('自定义接口地址必须填写专属 API Key，服务器不会把环境变量中的 Key 发到该地址');
     }
   }
 

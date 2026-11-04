@@ -77,8 +77,9 @@ apps/demo              演示站（widget 嵌入演示，仅消费产物与公�
 | `9528` | 客服9528 | `123456` | 普通客服 |
 | `9529` | 客服9529 | `123456` | 普通客服 |
 
-- 角色写入 JWT：管理员可见/可操作全部会话与工单；普通客服只看「接待大厅 + 自己接待的」。
-- 客服侧接口（队列、回复、工单、指标）要求 `Authorization: Bearer <token>`。SSE 不能自定义请求头：工作台先 `POST /api/auth/sse-ticket` 换一张 60 秒短票据，再用 `?ticket=` 连接（长效 JWT 不放进 URL）。
+- 角色写入 JWT，但**每次请求都会再对照当前账号**：停用或删除后令牌立即失效；降级后的权限以账号当前角色为准，不会把签发时的 `admin` 再用满 12 小时。姓名同样以当前账号为准。
+- 客服侧接口（队列、回复、工单、指标）要求 `Authorization: Bearer <token>`。SSE 不能自定义请求头：工作台先 `POST /api/auth/sse-ticket` 换一张 60 秒短票据，再用 `?ticket=` 连接（长效 JWT 不放进 URL）。短票据同样会复核账号是否仍启用、角色是否仍有效。
+- 上表口令是公开的演示口令。`NODE_ENV` 不是 `production` 时（`npm run start -- dev`）可以直接登录。`NODE_ENV=production`（Docker、Render、`npm run start`）**拒绝**密码 `123456`，除非显式设置 `ALLOW_DEMO_CREDENTIALS=true`。`npm run start -- demo` 只为本次本机演示自动打开该开关。生产环境请先改掉种子口令再关掉开关。改密码不会使已经发出的 JWT 提前失效；要立刻切断访问，请停用或删除该账号。
 - 会话详情与会话 SSE：客服走上述身份，带客服票据的非归属者（且非管理员）返回 403。访客必须出示该会话的访客令牌（见下一节）。
 - 客服身份只来自已验证 token，请求体里的身份字段不再被信任。
 - 生产部署请设置环境变量 `AUTH_SECRET`（JWT 签名密钥）。
@@ -173,6 +174,7 @@ npm run start       # NestJS 托管 API + 三套前端产物，http://localhost:
 - 入口：`/`（widget 嵌入演示）、`/workstation/`（客服工作台）、`/widget/widget.js`（嵌入脚本）。
 - 默认使用本地 SQLite 持久化（`apps/server/data/assistflow.db`），重启不丢；纯内存调试可设 `DB_DRIVER=memory`。
 - 建议在 `.env.local` 中设置 `AUTH_SECRET`（`openssl rand -hex 32`）。未设置时进程会生成随机密钥并写入 `DATA_DIR/.auth_secret`，单机重启可以复用；多实例请设成同一个值。
+- `npm run start` 会设置 `NODE_ENV=production`，因此种子口令 `123456` 不能登录工作台。本地改代码请用 `npm run start -- dev`；只想本机看构建产物并使用演示账号时，用 `npm run start -- demo`（自动放行演示口令）或自行设置 `ALLOW_DEMO_CREDENTIALS=true`。
 
 ### 3. 生产环境（Docker / Render）
 
@@ -192,7 +194,7 @@ docker run -d --name assistflow -p 3001:3001 \
   - **Postgres**：设置 `DATABASE_URL`（Neon/Supabase 等），会话/消息/工单写穿透入库。
   - **memory**：`DB_DRIVER=memory`，纯内存、重启清空。
 - **Render**：推送到 main 后按 `render.yaml` 自动 Docker 部署；`AUTH_SECRET` 由 Render 自动生成。注意 Render 文件系统是临时的（free 无持久磁盘），SQLite 重新部署会清空——要持久化请填 `DATABASE_URL` 用外部 Postgres，或付费挂 Disk 到 `/data`。
-- 生产环境未设置 `AUTH_SECRET` 时照常启动，并自动生成密钥、打印告警。多实例或正式环境仍应显式设置，否则各进程签发的 token 互不认。`NODE_ENV=production` 还会收紧接口错误详情，并在账号仍是演示弱口令时打错误日志。
+- 生产环境未设置 `AUTH_SECRET` 时照常启动，并自动生成密钥、打印告警。多实例或正式环境仍应显式设置，否则各进程签发的 token 互不认。`NODE_ENV=production` 还会收紧接口错误详情，并**拒绝**仍使用已公开演示口令 `123456` 的账号登录（日志里会列出这些工号）。一次性引导可设 `ALLOW_DEMO_CREDENTIALS=true`，改完密码后必须去掉该变量并重启。
 - 健康检查：`/api/health`（Render 用 healthCheckPath，本地 docker 用镜像内 HEALTHCHECK）。
 - CI 会构建生产镜像并启动验证健康检查，保证 Dockerfile 不漂移。
 
@@ -213,7 +215,8 @@ docker run -d --name assistflow -p 3001:3001 \
 | `DATABASE_URL` | — | Postgres 连接串（设置即用 Postgres） |
 | `SQLITE_PATH` | `DATA_DIR/assistflow.db` | SQLite 库文件路径（Docker 镜像内为 `/data/assistflow.db`） |
 | `DATA_DIR` | `apps/server/data` | faqs/inquiries/agents 数据目录 |
-| `NODE_ENV` | — | `production` 时收紧接口错误详情；未显式设置 `AUTH_SECRET` 或账号仍为演示弱口令时打日志 |
+| `NODE_ENV` | — | `production` 时收紧接口错误详情，并拒绝已公开的演示口令 `123456` 登录（除非 `ALLOW_DEMO_CREDENTIALS`）。未显式设置 `AUTH_SECRET` 时打日志 |
+| `ALLOW_DEMO_CREDENTIALS` | 生产环境关闭 | 仅 `NODE_ENV=production` 时有意义。`1` / `true` / `yes` / `on` 才允许用演示口令 `123456` 登录。本地 `npm run start -- dev` 不需要它；`npm run start -- demo` 会在未设置时自动设为 `true` |
 | `TRUST_PROXY` | 空（不信任转发头） | 传给 Express `trust proxy`。空字符串为 `false`，不读取 `x-forwarded-*`，访客 IP 只用直连 `req.ip`。`true` / `false` 按布尔解析，纯数字（如 `1`）是代理层数，其他字符串原样交给 Express（如 `loopback`）。`render.yaml` 设为 `1` |
 | `CORS_ORIGINS` | 空（不限制来源） | 逗号分隔的来源白名单。留空时 `enableCors({})`，`cors` 默认来源为 `*`，任意网站上的 widget 都能调用 `/api/chat`。设置后只放行列出的源，并允许请求头 `Authorization`、`Content-Type`、`x-visitor-token`，方法为 `GET` / `POST` / `PATCH` / `DELETE` / `OPTIONS` |
 | `ALLOW_ANON_SESSION_READ` | 关闭 | 只有值严格等于 `true` 时，才放行不带访客令牌的会话读取和续写，给旧版 widget 灰度。`1`、`yes` 不会打开。线上 widget 升级后应关闭 |
@@ -246,6 +249,8 @@ docker run -d --name assistflow -p 3001:3001 \
 > `DEMO_ENABLED`、`WIDGET_ENABLED`、`WORKSTATION_ENABLED`、`AI_ENABLED` 用同一套布尔解析：未设置或空字符串取上表默认值；`1` / `true` / `yes` / `on` 为开，其余值（含 `false`、`0`）为关。`.env.example` 注释里的 `github` 厂商预设已从代码移除，`AI_PROVIDER=github` 不会命中上表。
 
 设置 `AI_ENABLED=true` 且配置对应 API Key 后，FAQ 会作为模型回答上下文。模型失败时仍会自动降级到本地 FAQ。
+
+工作台「模型管理」里，接口地址留空时走厂商预设（或本进程启动时的 `AI_BASE_URL`），Key 留空时使用服务器环境变量。一旦填写的地址与该厂商官方主机（以及本进程为该厂商解析出的 `AI_BASE_URL`）不是同一协议、主机和端口，就必须填写这条模型自己的 API Key。服务器不会把 `AI_API_KEY` 或厂商环境变量 Key 发到自定义地址。Ollama 这类无需鉴权的本地服务可以改地址，连接时只用占位串，同样不会附带服务器 Key。已经写在 `model-settings.json` 里的自定义地址如果没有专属 Key，调用时也不会补上环境变量 Key。
 
 ## 本地知识库
 
@@ -358,7 +363,7 @@ node scripts/dialog-test.js    # 访客↔客服对话时序回归
 - 运行时以内存为事实来源，写穿透到持久化后端（默认 SQLite，可切 Postgres / memory）。
 - 每日趋势是服务端按本地日期写入持久化后端的快照（约每 30 分钟）。`DB_DRIVER=memory` 时重启即清空。
 - FAQ 使用关键词和字符匹配，不是语义向量检索。
-- 演示账号种子在 `apps/server/data/agents.json`。管理员可在工作台「用户管理」增删改、启停和重置密码（写回同一文件并立即生效）。直接改这个文件不会热加载，需要重启。生产环境请换掉演示弱口令。
+- 演示账号种子在 `apps/server/data/agents.json`（工号 `9527` / `9528` / `9529`，口令 `123456`，其中 `9527` 是管理员）。管理员可在工作台「用户管理」增删改、启停和重置密码（写回同一文件并立即生效）。直接改这个文件不会热加载，需要重启。`NODE_ENV=production` 时这些口令不能登录，除非 `ALLOW_DEMO_CREDENTIALS=true`。本地开发（`npm run start -- dev`）不受影响。
 - 图片附件当前使用 Base64 存储，不适合生产环境。
 
 ## 部署
