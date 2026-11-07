@@ -133,6 +133,7 @@ export default function UsersPanel() {
       </div>
 
       <section className="panel-block">
+        <div className="data-table-wrap">
         <table className="data-table">
           <thead>
             <tr><th>账号</th><th>姓名</th><th>角色</th><th>状态</th><th>操作</th></tr>
@@ -157,6 +158,7 @@ export default function UsersPanel() {
             ))}
           </tbody>
         </table>
+        </div>
         {users.length === 0 && <div className="empty">还没有账号，点击右上角新建</div>}
       </section>
 

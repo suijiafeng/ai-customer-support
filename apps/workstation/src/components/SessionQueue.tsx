@@ -127,6 +127,8 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
   const [keyword, setKeyword] = useState('');
   const [poolOpen, setPoolOpen] = useState(false);
   const [listOpen, setListOpen] = useState(true);
+  // 有待接待访客时默认展开大厅。用户手动折叠后不再自动打开。
+  const poolTouched = useRef(false);
 
   // 未读标记：messageCount 超过已读基线即未读；打开会话即更新基线
   const seenRef = useRef<Record<string, number>>({});
@@ -209,6 +211,14 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
     return { pool, others, poolTotal, tabUnread, unreadTotal };
   }, [sessions, filter, keyword, agent, activeId]);
 
+  useEffect(() => {
+    if (!poolTouched.current && poolTotal > 0) setPoolOpen(true);
+  }, [poolTotal]);
+  const togglePool = useCallback(() => {
+    poolTouched.current = true;
+    setPoolOpen((v) => !v);
+  }, []);
+
   const renderItem = (s: SessionSummary) => (
     <SessionItem key={s.sessionId} s={s} active={s.sessionId === activeId} unread={unreadCount(s)} onSelect={onSelect} />
   );
@@ -232,8 +242,8 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
             role="button"
             tabIndex={0}
             aria-expanded={poolOpen}
-            onClick={() => setPoolOpen((v) => !v)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPoolOpen((v) => !v); } }}
+            onClick={togglePool}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePool(); } }}
           >
             <Icon name="inbox" size={16} />
             <span className="q-section-title">接待大厅</span>
@@ -287,7 +297,9 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
                 {others.map(renderItem)}
                 {!others.length && (
                   <div className="section-empty">
-                    {filter === 'reply' ? '没有待回复的会话，干得漂亮' : '暂无会话'}
+                    {filter === 'reply'
+                      ? (poolTotal > 0 ? '没有待回复的会话，接待大厅还有访客在等' : '没有待回复的会话，干得漂亮')
+                      : '暂无会话'}
                   </div>
                 )}
               </div>

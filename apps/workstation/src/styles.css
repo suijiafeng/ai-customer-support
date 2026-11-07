@@ -115,10 +115,12 @@ button { font-family: inherit; }
 .md .md-pre code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; white-space: pre; }
 
 /* ---- 应用内 toast / confirm 弹窗 ---- */
-.toast-host { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 200;
-  display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
-.toast { pointer-events: auto; display: flex; align-items: center;
-  min-width: 200px; max-width: 80vw; padding: 11px 16px; border-radius: 12px;
+.toast-host { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 320;
+  display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none;
+  width: max-content; max-width: calc(100vw - 32px); }
+.toast { pointer-events: auto; display: block;
+  min-width: 200px; max-width: min(440px, calc(100vw - 32px)); padding: 11px 16px; border-radius: 12px;
+  white-space: normal; overflow-wrap: anywhere;
   font-size: 16px; line-height: 1.5; color: #1a1d21; background: #fff;
   border: 1px solid #e6e7ea; box-shadow: 0 12px 32px rgba(20,24,29,.16);
   animation: toast-in .18s ease; }
@@ -1163,3 +1165,33 @@ button.switch:disabled { opacity: .5; cursor: not-allowed; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .faq-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
 .model-tenants { margin-top: 2px; font-size: 12px; color: var(--ink-4); }
+
+/* 用户表在窄屏会把列压到比内容更窄：标签被折成单字，删除被裁掉。
+   外层负责横向滚动，表格按内容撑开，不再靠 overflow:hidden 切掉末列。 */
+.data-table-wrap { overflow-x: auto; }
+
+@media (max-width: 640px) {
+  /* 操作列在桌面用 sticky + 定宽吸在右缘；手机上这列比可视区还宽，会盖住编号和名称。
+     窄屏改回随表格滚动，左侧字段先露出来，操作滑到右侧再点。 */
+  .ticket-table th:last-child,
+  .ticket-table td:last-child,
+  .tenant-table th:last-child,
+  .tenant-table td:last-child,
+  .ticket-table.model-table th:last-child,
+  .ticket-table.model-table td:last-child,
+  .ticket-table.tenant-table th:last-child,
+  .ticket-table.tenant-table td:last-child {
+    position: static;
+    right: auto;
+    width: auto;
+    min-width: max-content;
+    box-shadow: none;
+  }
+  .tag { white-space: nowrap; }
+  .data-table { min-width: 560px; overflow: visible; }
+  .data-table th, .data-table td, .row-actions { white-space: nowrap; }
+  .active-model-bar { flex-wrap: wrap; align-items: flex-start; row-gap: 8px; }
+  .active-model-bar strong,
+  .active-model-bar .mono,
+  .active-model-bar .tag { white-space: nowrap; }
+}
