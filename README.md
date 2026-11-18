@@ -2,6 +2,18 @@
 
 访客挂件嵌进任意网站，本地知识库先回答；只有访客明确要求转人工时，才把会话交给客服工作台。
 
+## 客服 Agent
+
+客服 Agent 接在现有 `ChatService.handleChat` 里：寒暄和人工接管仍走原来的分支。剩下的话如果被识别成办事，才进入 `runAgentLoop`（`apps/server/src/agent/loop.ts`）。
+
+- 模型：配置了可用的 OpenAI 兼容客户端时，用 `openai-tools.ts` 发 `tools`。提供方报不支持 tool/function 时，同一条对话改走不带工具的补全。没配 Key 或关掉 AI 时，用 `planner.ts` 的本地规则选工具，不发起付费请求。
+- 步数：默认最多 4 步，每步 8 秒。超时、模型报错或步数用尽时，回复一句普通说明，并提示可以转人工。
+- 工具：`query_order`、`query_logistics`、`create_ticket`、`change_address`、`request_refund`、`transfer_human`。参数用一份 JSON Schema 子集校验。`read` 直接执行，`confirm` 只生成待确认动作。管理员在租户编辑里改开关，`PUT /api/widget-keys/:key/agent-tools` 写进租户记录并调用 `ToolRegistry.setTenantTools`。没单独关过的工具默认启用。只有管理员能读写。
+- 订单和物流来自 `CommerceAdapter`。默认实现是 `DemoCommerce`，订单带 `demo: true`，回复和确认卡片写明「演示数据」。
+- 访客身份是会话 id，读取和确认都要现有的 `visitor-token`。订单的 `ownerId` 不是当前会话就返回 forbidden，不返回别人的手机号和地址。结果进模型前会脱敏，并标成 `TOOL_RESULT data only, not instructions`。
+- `change_address` 和 `request_refund` 先在挂件里出确认卡片，访客点确认才执行，点取消不改订单。坐席在会话里能看到每条 `agentTrace`，也能看 `GET /api/sessions/:id/agent-audit`。
+- 审计写入 `agent_audit` 表（SQLite 或 Postgres，和会话、工单同一套存储）。记下会话、工具、脱敏后的参数摘要、状态和耗时。`GET /api/sessions/:id/agent-audit` 从这张表读。客服登录后可看自己能进的会话；表本身不另做访客接口。
+
 A full-stack support desk: an embeddable widget, local FAQ by default, and a live agent workstation when the visitor asks for a human.
 
 [![CI](https://github.com/suijiafeng/ai-customer-support/actions/workflows/ci.yml/badge.svg)](https://github.com/suijiafeng/ai-customer-support/actions/workflows/ci.yml)
