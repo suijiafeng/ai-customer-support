@@ -196,4 +196,12 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
 .afw.mobile .key-hint { display: none; }
 .afw.mobile .tool { width: 36px; height: 36px; }
 .afw.mobile .quick-pop { left: 0; right: 0; max-width: 100%; border-radius: 12px 12px 0 0; bottom: 100px; }
+.agent-card { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--afw-brand); border-radius: 10px; background: var(--afw-brand-soft); color: #1a1d21; }
+.agent-card-title { font-weight: 600; margin-bottom: 4px; }
+.agent-card p { margin: 0 0 8px; font-size: 13px; line-height: 1.5; }
+.agent-demo { font-size: 12px; color: #92400e; margin-bottom: 8px; }
+.agent-card-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.agent-card-actions button { border: 1px solid #d0d3d7; background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.agent-card-actions .primary { border: 0; background: var(--afw-brand); color: #fff; }
+.agent-card.done { font-size: 12px; color: #3d4249; }
 `;

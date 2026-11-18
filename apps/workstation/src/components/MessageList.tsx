@@ -44,6 +44,18 @@ const MessageRow = memo(function MessageRow({ m, customerName }: { m: UiMessage;
             </div>
           )}
         </div>
+        {m.agentTrace && m.agentTrace.length > 0 && (
+          <ul className="agent-trace">
+            {m.agentTrace.map((step, index) => (
+              <li key={`${step.tool}-${index}`}>
+                {step.demo ? '演示数据 · ' : ''}{step.tool} · {step.status} · {step.summary} · {step.durationMs}ms
+              </li>
+            ))}
+          </ul>
+        )}
+        {m.agentAction && (
+          <div className="agent-trace">待确认：{m.agentAction.title}（{m.agentAction.status}）{m.agentAction.demo ? ' · 演示数据' : ''}</div>
+        )}
         {time && <div className="time">{time}</div>}
       </div>
     </div>

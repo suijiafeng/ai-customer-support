@@ -7,6 +7,15 @@ import EmptyState from '../ui/EmptyState.js';
 
 const PAGE_SIZE = 10;
 
+const AGENT_TOOL_LABELS: Record<string, string> = {
+  query_order: '查询订单',
+  query_logistics: '查询物流',
+  create_ticket: '创建工单',
+  change_address: '修改收货地址',
+  request_refund: '申请退款',
+  transfer_human: '转人工',
+};
+
 function fmtDate(iso?: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -303,7 +312,21 @@ function EditTenantModal({
   const [remark, setRemark] = useState(tenant.remark || '');
   const [active, setActive] = useState(tenant.active);
   const [modelId, setModelId] = useState(tenant.modelId || '');
+  const [toolFlags, setToolFlags] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let stop = false;
+    requestJson<{ tools: Array<{ name: string; enabled: boolean }> }>(
+      `/api/widget-keys/${encodeURIComponent(tenant.key)}/agent-tools`,
+    ).then((data) => {
+      if (stop) return;
+      const next: Record<string, boolean> = {};
+      for (const tool of data.tools || []) next[tool.name] = tool.enabled;
+      setToolFlags(next);
+    }).catch(() => { if (!stop) setToolFlags({}); });
+    return () => { stop = true; };
+  }, [tenant.key]);
 
   const submit = async () => {
     const value = name.trim();
@@ -317,7 +340,13 @@ function EditTenantModal({
           name: value, domain: domain.trim(), remark: remark.trim(), active,
           // 未改动时不提交：原模型已停用/删除时，避免因为校验失败而无法保存其他字段
           ...(modelId !== (tenant.modelId || '') ? { modelId } : {}),
+          agentTools: toolFlags,
         }),
+      });
+      await requestJson(`/api/widget-keys/${encodeURIComponent(tenant.key)}/agent-tools`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tools: toolFlags }),
       });
       onUpdated(data.key);
     } catch (err: any) {
@@ -365,6 +394,25 @@ function EditTenantModal({
             maxLength={120}
             onChange={(e) => setRemark(e.target.value)}
           />
+        </div>
+        <div className="field" aria-label="客服工具">
+          <label>客服工具</label>
+          <div className="tool-switches">
+            {Object.entries(AGENT_TOOL_LABELS).map(([name, label]) => (
+              <label key={name} className="switch">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label={label}
+                  checked={toolFlags[name] !== false}
+                  onChange={(e) => setToolFlags((current) => ({ ...current, [name]: e.target.checked }))}
+                />
+                <span className="track" aria-hidden="true" />
+                <span className="switch-label">{label}</span>
+              </label>
+            ))}
+          </div>
+          <p className="field-hint">关掉后，这个租户的客服 Agent 不会再调用该工具。订单和物流是演示数据。</p>
         </div>
         <div className="field">
           <label id="edit-tenant-active-label">

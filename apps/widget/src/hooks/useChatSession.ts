@@ -357,6 +357,20 @@ export function useChatSession({
   /** 访客主动把会话切回 AI：以一条正常访客消息发出，服务端解除接管后照常回答 */
   const switchToAi = useCallback(() => send('让 AI 先回答', { preferAi: true }), [send]);
 
+  const decideAction = useCallback(async (actionId: string, decision: 'confirm' | 'cancel') => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+    const data = await requestJson('/api/chat/agent-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...visitorAuthHeaders(sid) },
+      body: JSON.stringify({ sessionId: sid, siteKey, tenantId, actionId, decision }),
+    });
+    saveVisitorToken(sid, data?.visitorToken);
+    setMessages(data.messages || [], true);
+    if (data?.session?.status === 'assigned') setHumanAssigned(true);
+    if (data?.session?.status && data.session.status !== 'assigned') setHumanAssigned(false);
+  }, [requestJson, setMessages, siteKey, tenantId]);
+
   return {
     connection,
     messages,
@@ -372,5 +386,6 @@ export function useChatSession({
     onListScroll,
     send,
     retrySend,
+    decideAction,
   };
 }

@@ -154,6 +154,7 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
     onListScroll,
     send,
     retrySend,
+    decideAction,
     humanAssigned,
     switchToAi,
   } = useChatSession({
@@ -389,6 +390,20 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
                           </div>
                         )}
                       </div>
+                      {m.agentAction?.status === 'pending' && (
+                        <div className="agent-card" role="group" aria-label={m.agentAction.title}>
+                          <div className="agent-card-title">{m.agentAction.title}</div>
+                          <p>{m.agentAction.summary}</p>
+                          {m.agentAction.demo && <div className="agent-demo">演示数据，不是真实订单系统</div>}
+                          <div className="agent-card-actions">
+                            <button type="button" onClick={() => decideAction(m.agentAction!.id, 'cancel')}>取消</button>
+                            <button type="button" className="primary" onClick={() => decideAction(m.agentAction!.id, 'confirm')}>确认</button>
+                          </div>
+                        </div>
+                      )}
+                      {m.agentAction && m.agentAction.status !== 'pending' && (
+                        <div className="agent-card done">{m.agentAction.status === 'cancelled' ? '已取消' : m.agentAction.status === 'done' ? '已办理' : '未完成'}</div>
+                      )}
                       {m.from === 'customer' && m.status === 'sending' && (
                         <div className="msg-status">发送中…</div>
                       )}
