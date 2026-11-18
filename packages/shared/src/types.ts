@@ -28,6 +28,25 @@ export interface Attachment {
   name: string;
 }
 
+/** 需访客确认后才执行的工具动作。演示数据必须带 demo。 */
+export interface AgentActionCard {
+  id: string;
+  tool: string;
+  title: string;
+  summary: string;
+  status: 'pending' | 'confirmed' | 'cancelled' | 'done' | 'failed';
+  demo: boolean;
+}
+
+/** 一次工具调用的可见结果。summary 已脱敏，不含完整手机号或门牌。 */
+export interface AgentTraceStep {
+  tool: string;
+  status: 'ok' | 'denied' | 'invalid' | 'error' | 'pending' | 'disabled';
+  summary: string;
+  durationMs: number;
+  demo: boolean;
+}
+
 export interface Message {
   id: string;
   /** 客户端生成的消息标识：用于发送重试去重（幂等） */
@@ -39,6 +58,10 @@ export interface Message {
   agentName: string | null;
   attachments: Attachment[];
   createdAt: string;
+  /** 访客确认卡片。没有工具动作时不出现。 */
+  agentAction?: AgentActionCard | null;
+  /** 本轮助手回复里实际发生过的工具调用。 */
+  agentTrace?: AgentTraceStep[] | null;
 }
 
 export interface TicketNote {
@@ -150,6 +173,8 @@ export interface Tenant {
   active: boolean;
   /** 指定的 AI 模型（模型管理里的模型 ID）；空 = 跟随默认模型。指定模型停用/删除时自动回退默认 */
   modelId?: string | null;
+  /** 客服工具开关。缺省或未列出的工具视为启用；显式 false 才关闭。 */
+  agentTools?: Record<string, boolean>;
   createdAt: string;
   updatedAt: string;
 }

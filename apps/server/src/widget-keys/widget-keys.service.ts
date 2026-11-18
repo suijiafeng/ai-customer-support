@@ -9,6 +9,24 @@ const MAX_NAME_LENGTH = 60;
 const MAX_REMARK_LENGTH = 120;
 const MAX_DOMAIN_LENGTH = 100;
 
+export const AGENT_TOOL_NAMES = [
+  'query_order',
+  'query_logistics',
+  'create_ticket',
+  'change_address',
+  'request_refund',
+  'transfer_human',
+] as const;
+
+export function normalizeAgentTools(raw: unknown): Record<string, boolean> {
+  const source = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const flags: Record<string, boolean> = {};
+  for (const name of AGENT_TOOL_NAMES) {
+    if (name in source) flags[name] = source[name] !== false && source[name] !== 'false' && source[name] !== 0;
+  }
+  return flags;
+}
+
 const newTenantId = () => `tn_${randomBytes(5).toString('hex')}`;
 
 const KEY_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -122,7 +140,7 @@ export class WidgetKeysService implements OnModuleInit {
 
   update(
     key: string,
-    patch: { name?: string; domain?: string; remark?: string; active?: boolean; modelId?: string | null }
+    patch: { name?: string; domain?: string; remark?: string; active?: boolean; modelId?: string | null; agentTools?: Record<string, boolean> }
   ): Tenant {
     const existing = this.keys.get(key);
     if (!existing) throw new NotFoundException({ error: 'widget key not found' });
@@ -136,6 +154,7 @@ export class WidgetKeysService implements OnModuleInit {
     if (patch.remark !== undefined) updated.remark = String(patch.remark || '').trim().slice(0, MAX_REMARK_LENGTH);
     if (patch.active !== undefined) updated.active = Boolean(patch.active);
     if (patch.modelId !== undefined) updated.modelId = normalizeModelId(patch.modelId);
+    if (patch.agentTools !== undefined) updated.agentTools = normalizeAgentTools(patch.agentTools);
     this.keys.set(key, updated);
     this.store.saveWidgetKey(updated);
     return updated;

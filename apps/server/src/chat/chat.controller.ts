@@ -64,6 +64,29 @@ export class ChatController {
 
   @UseGuards(ThrottlerGuard)
   @Throttle({ chat: { ttl: 60000, limit: 20 } })
+  @Post('agent-action')
+  async agentAction(@Body() body: any, @Req() req: Request) {
+    const sessionId = String(body?.sessionId || '');
+    const actionId = String(body?.actionId || '');
+    const decision = body?.decision === 'confirm' ? 'confirm' : body?.decision === 'cancel' ? 'cancel' : '';
+    if (!sessionId || !actionId || !decision) {
+      throw new BadRequestException({ error: 'sessionId, actionId and decision are required' });
+    }
+    this.assertValidSiteKey(body, req);
+    const token = req.headers['x-visitor-token'] as string | undefined;
+    if (!this.auth.verifyVisitorToken(token, sessionId)) {
+      throw new ForbiddenException({ error: 'visitor_token_required' });
+    }
+    return this.withVisitorToken(await this.chat.decideAgentAction({
+      sessionId,
+      actionId,
+      decision,
+      siteKey: body?.siteKey,
+    }));
+  }
+
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ chat: { ttl: 60000, limit: 20 } })
   @Post('stream')
   async chatStream(@Body() body: any, @Res() res: Response, @Req() req: Request) {
     this.assertHasContent(body);

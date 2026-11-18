@@ -137,6 +137,8 @@ export class SessionsService implements OnModuleInit {
     agentName?: string | null;
     attachments?: Attachment[];
     clientMessageId?: string | null;
+    agentAction?: Message['agentAction'];
+    agentTrace?: Message['agentTrace'];
   }): Message {
     return {
       id: randomUUID(),
@@ -148,6 +150,8 @@ export class SessionsService implements OnModuleInit {
       agentName: params.agentName ?? null,
       attachments: params.attachments ?? [],
       createdAt: new Date().toISOString(),
+      ...(params.agentAction ? { agentAction: params.agentAction } : {}),
+      ...(params.agentTrace?.length ? { agentTrace: params.agentTrace } : {}),
     };
   }
 

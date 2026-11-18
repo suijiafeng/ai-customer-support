@@ -83,6 +83,28 @@ test('每日指标快照：按天 upsert + 读取最近 N 天（升序）', asyn
   assert.equal(trend[1].waiting, 9); // upsert 覆盖
 });
 
+test('agent_audit 写入后可按会话读回，且摘要里没有明文手机号', async () => {
+  const store = freshStore();
+  await store.init();
+  const entry = {
+    id: 'audit-1',
+    sessionId: 's-audit',
+    tenantKey: 'tenant',
+    tool: 'query_order',
+    argsSummary: '联系 138****8000',
+    status: 'ok',
+    durationMs: 3,
+    demo: true,
+    at: '2026-11-18T00:00:00.000Z',
+  };
+  await store.saveAgentAudit(entry);
+  const rows = await store.loadAgentAudit('s-audit');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, 'ok');
+  assert.equal(JSON.stringify(rows).includes('13812348000'), false);
+  assert.equal((await store.loadAgentAudit('other')).length, 0);
+});
+
 test('stats 默认无写错误', async () => {
   const store = freshStore();
   await store.init();

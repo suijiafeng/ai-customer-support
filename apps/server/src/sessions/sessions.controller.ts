@@ -22,6 +22,7 @@ import { normalizeAttachments, normalizeProfile } from '../common/normalize.js';
 import { SseService } from '../sse/sse.service.js';
 import { SessionTicketService } from '../workflow/session-ticket.service.js';
 import { SessionsService } from './sessions.service.js';
+import { AgentAuditService } from '../agent/audit.js';
 
 @Controller('api/sessions')
 export class SessionsController {
@@ -30,7 +31,8 @@ export class SessionsController {
     private readonly workflow: SessionTicketService,
     private readonly metrics: MetricsService,
     private readonly sse: SseService,
-    private readonly auth: AuthService
+    private readonly auth: AuthService,
+    private readonly agentAudit: AgentAuditService,
   ) {}
 
   @UseGuards(AgentAuthGuard)
@@ -78,6 +80,18 @@ export class SessionsController {
       error: 'visitor token required',
       detail: '会话读取需要出示该会话的访客令牌（x-visitor-token 头或 ?vt= 查询串）',
     });
+  }
+
+  @UseGuards(AgentAuthGuard)
+  @Get(':sessionId/agent-audit')
+  async agentAuditLog(@Param('sessionId') sessionId: string, @Req() req: any) {
+    const agent = req.agent as AuthenticatedAgent;
+    const { session } = await this.sessions.loadDetail(sessionId);
+    if (!session) throw new NotFoundException({ error: 'session not found' });
+    if (!this.sessions.canView(session, agent)) {
+      throw new ForbiddenException({ error: 'session is handled by another agent' });
+    }
+    return { entries: await this.agentAudit.forSession(sessionId) };
   }
 
   @Get(':sessionId')
