@@ -2,9 +2,28 @@
 
 嵌进网站的客服挂件，加上给客服用的工作台。没配模型 Key 时用本地 FAQ 回答；访客说出「转人工」后，会话才交给人工。
 
-![演示站上的访客挂件，本地 FAQ 回答报价问题](./docs/screenshots/widget-chat-desktop.png)
-
-![客服工作台：左侧队列、中间对话、右侧知识库命中](./docs/screenshots/workstation-session-desktop.png)
+<table>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/highlight-faq.png" width="400" alt="演示站上的访客挂件，本地 FAQ 回答报价" />
+      <br />本地 FAQ：没配模型 Key 也能回答
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/highlight-desk.png" width="400" alt="工作台里转人工后的对话、意图和跟进事项" />
+      <br />转人工后：对话、意图和跟进事项在一屏
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/highlight-hall.png" width="400" alt="接待大厅列出尚未认领的转人工会话" />
+      <br />接待大厅：还没被认领的转人工会话
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/highlight-mobile.png" width="220" alt="手机宽度下挂件全屏显示报价回答" />
+      <br />窄屏：挂件铺满手机屏幕
+    </td>
+  </tr>
+</table>
 
 ## 功能
 
