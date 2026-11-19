@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createMessageArchive } from '@assistflow/shared';
 import { loadVisitorId, ensureVisitorId, isVisitorIdValid, resetVisitorId } from '../visitorId.js';
 import { newId, normalizeMessages, streamChat, type PendingImage, type UiMessage } from '../chatApi.js';
-import { saveVisitorToken, visitorAuthHeaders, withVisitorQuery } from '../visitorToken.js';
+import { loadVisitorToken, saveVisitorToken, visitorAuthHeaders, withVisitorQuery } from '../visitorToken.js';
 
 // 流式中断后等待会话 SSE 推回最终结果的兜底时长：超时仍未收到则把消息标为失败可重试
 const STREAM_FALLBACK_MS = 12000;
@@ -49,7 +49,8 @@ export function useChatSession({
   startCooldown,
   onSendStart,
 }: UseChatSessionParams) {
-  const [connection, setConnection] = useState<'syncing' | 'synced'>('syncing');
+  // idle：还没有访客令牌，不能去拉会话。一开始就标成 syncing 会让标题一直停在「正在同步」。
+  const [connection, setConnection] = useState<'idle' | 'syncing' | 'synced'>('idle');
   const [messages, setMessagesState] = useState<UiMessage[]>([]);
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false); // ref 版本供 send 内部读取，避免 sending state 进入依赖数组
@@ -61,6 +62,7 @@ export function useChatSession({
   const [sessionId, setSessionId] = useState(() => loadVisitorId(siteKey) ?? '');
   const listEl = useRef<HTMLDivElement | null>(null);
   const sessionEvents = useRef<EventSource | null>(null);
+  const subscribedSession = useRef('');
   const sessionIdRef = useRef(loadVisitorId(siteKey) ?? ''); // 访客标识：首次发送消息后才惰性生成，存于本地并带完整性校验
   // 本次发送的乐观消息对（访客消息 id 即 clientMessageId + 流式 AI 气泡 id）
   const inflightRef = useRef<{ userId: string; aiId: string } | null>(null);
@@ -113,7 +115,7 @@ export function useChatSession({
         throw Object.assign(new Error(data?.msg || data?.error || `request failed: ${response.status}`), {
           status: response.status,
           retryAfter: Number(response.headers.get('retry-after')) || 0,
-          code: data?.error,
+          code: data?.msg || data?.error,
         });
       return data?.data ?? data;
     },
@@ -121,8 +123,20 @@ export function useChatSession({
   );
 
   const activate = useCallback(async () => {
-    sessionEvents.current?.close();
     const sessionId = sessionIdRef.current;
+    // 令牌在首条对话的响应里才签发。没令牌就 GET / SSE 一定 403，
+    // EventSource 还会按这条无令牌的 URL 一直重连，标题停在「正在同步」，客服回复也推不回来。
+    if (!sessionId || !loadVisitorToken(sessionId)) {
+      sessionEvents.current?.close();
+      sessionEvents.current = null;
+      subscribedSession.current = '';
+      setConnection('idle');
+      return;
+    }
+    if (sessionEvents.current && subscribedSession.current === sessionId) return;
+
+    sessionEvents.current?.close();
+    setConnection('syncing');
     try {
       const data = await requestJson(`/api/sessions/${encodeURIComponent(sessionId)}`, {
         headers: visitorAuthHeaders(sessionId),
@@ -135,6 +149,7 @@ export function useChatSession({
       withVisitorQuery(`${apiBase}/api/sessions/${encodeURIComponent(sessionId)}/events`, sessionId)
     );
     sessionEvents.current = es;
+    subscribedSession.current = sessionId;
     es.onopen = () => setConnection('synced');
     es.addEventListener('session', (event) => {
       try {
@@ -149,14 +164,17 @@ export function useChatSession({
 
   // 确保会话 ID 合法：不存在则生成，已被篡改/损坏则重新生成
   const ensureSession = useCallback(async () => {
-    const prev = sessionIdRef.current;
     if (!sessionIdRef.current || !isVisitorIdValid(siteKey, sessionIdRef.current)) {
       sessionIdRef.current = ensureVisitorId(siteKey);
       setSessionId(sessionIdRef.current);
     }
-    if (!sessionEvents.current || sessionIdRef.current !== prev) {
-      await activate();
+    if (subscribedSession.current && subscribedSession.current !== sessionIdRef.current) {
+      sessionEvents.current?.close();
+      sessionEvents.current = null;
+      subscribedSession.current = '';
     }
+    // 有令牌才订阅。首条消息的令牌要等响应回来再 activate。
+    if (loadVisitorToken(sessionIdRef.current)) await activate();
   }, [siteKey, activate]);
 
   const send = useCallback(
@@ -262,6 +280,8 @@ export function useChatSession({
         // 两条路径（流式 / 一次性回退）汇合于此：服务端在每次响应里下发访客令牌，
         // 存下来供后续读取会话详情与 SSE 使用；每次都覆盖 = 顺带续期
         saveVisitorToken(sessionIdRef.current, data?.visitorToken);
+        // 令牌刚落盘，这时才连得上会话 SSE，客服之后的回复才能推到挂件里
+        await activate();
         setMessages(data.messages || [], true);
         if (data?.session) setHumanAssigned(data.session.status === 'assigned');
       } catch (err: any) {
@@ -321,6 +341,7 @@ export function useChatSession({
       setMessages,
       scrollToBottom,
       startCooldown,
+      activate,
     ]
   );
 
@@ -339,10 +360,13 @@ export function useChatSession({
     const existing = loadVisitorId(siteKey);
     if (existing) {
       sessionIdRef.current = existing;
-      activate();
+      setSessionId(existing);
+      if (loadVisitorToken(existing)) activate();
     }
     return () => {
       sessionEvents.current?.close();
+      sessionEvents.current = null;
+      subscribedSession.current = '';
     };
   }, [siteKey, activate]);
 
@@ -366,10 +390,11 @@ export function useChatSession({
       body: JSON.stringify({ sessionId: sid, siteKey, tenantId, actionId, decision }),
     });
     saveVisitorToken(sid, data?.visitorToken);
+    await activate();
     setMessages(data.messages || [], true);
     if (data?.session?.status === 'assigned') setHumanAssigned(true);
     if (data?.session?.status && data.session.status !== 'assigned') setHumanAssigned(false);
-  }, [requestJson, setMessages, siteKey, tenantId]);
+  }, [requestJson, setMessages, siteKey, tenantId, activate]);
 
   return {
     connection,

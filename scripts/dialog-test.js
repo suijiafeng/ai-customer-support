@@ -1,10 +1,22 @@
 // 模拟访客 ↔ 客服两个对话框相互发消息，校验消息排序和双方位置。
-// 需要服务已在运行（npm start）。客服侧接口走 JWT（演示账号见 apps/server/data/agents.json）。
+// 需要服务已在运行（npm run start -- dev，或 ALLOW_DEMO_CREDENTIALS 打开的演示进程）。
+// 客服侧接口走 JWT（演示账号见 apps/server/data/agents.json）。
+// 访客侧使用空库种子租户（与 apps/demo 嵌入代码、widget-keys seed 一致），
+// 续写会话时带回响应里的访客令牌。成功响应是 { code, msg, data }。
 const BASE = process.env.SMOKE_BASE_URL || process.env.BASE_URL || 'http://127.0.0.1:3001';
+const SITE_KEY = 'd0KX6-CDtI-Gaxc-fR1K';
+const TENANT_ID = 'tn_846ad88eee';
 const sessionId = `dialog-test-${Date.now()}`;
 const agent = { id: '9527', name: '客服9527' };
 let agentToken = '';
 let otherToken = '';
+let visitorToken = '';
+
+function unwrap(json) {
+  if (!json || typeof json !== 'object' || typeof json.code !== 'number') return json;
+  if (json.code === 0) return json.data ?? {};
+  return { error: json.msg, ...(json.data && typeof json.data === 'object' ? json.data : {}) };
+}
 
 async function login(agentNo) {
   const r = await fetch(`${BASE}/api/auth/login`, {
@@ -12,8 +24,9 @@ async function login(agentNo) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ agentNo, password: '123456' }),
   });
-  if (!r.ok) throw new Error(`login ${agentNo} ${r.status}`);
-  return (await r.json()).token;
+  const data = unwrap(await r.json());
+  if (!r.ok || !data?.token) throw new Error(`login ${agentNo} ${r.status}`);
+  return data.token;
 }
 
 const assert = (cond, msg) => {
@@ -26,11 +39,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function customerSay(text) {
   const r = await fetch(`${BASE}/api/chat`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ sessionId, message: text, visitor: { id: 'v-test', name: '访客小明' } }),
+    headers: {
+      'content-type': 'application/json',
+      ...(visitorToken ? { 'x-visitor-token': visitorToken } : {}),
+    },
+    body: JSON.stringify({
+      sessionId,
+      message: text,
+      siteKey: SITE_KEY,
+      tenantId: TENANT_ID,
+      visitor: { id: 'v-test', name: '访客小明' },
+    }),
   });
-  if (!r.ok) throw new Error(`/api/chat ${r.status}`);
-  return r.json();
+  const data = unwrap(await r.json());
+  if (!r.ok) throw new Error(`/api/chat ${r.status}: ${data?.error || 'failed'}`);
+  if (data?.visitorToken) visitorToken = data.visitorToken;
+  return data;
 }
 
 async function agentSay(text) {
@@ -44,9 +68,12 @@ async function agentSay(text) {
 }
 
 async function fetchSession() {
-  const r = await fetch(`${BASE}/api/sessions/${sessionId}`);
-  if (!r.ok) throw new Error(`get session ${r.status}`);
-  return r.json();
+  const r = await fetch(`${BASE}/api/sessions/${sessionId}`, {
+    headers: { authorization: `Bearer ${agentToken}` },
+  });
+  const data = unwrap(await r.json());
+  if (!r.ok) throw new Error(`get session ${r.status}: ${data?.error || 'failed'}`);
+  return data;
 }
 
 (async () => {

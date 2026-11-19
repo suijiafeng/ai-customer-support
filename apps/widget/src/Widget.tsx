@@ -312,9 +312,9 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
                 </span>
                 <span className="title-text">
                   <span className="title-name">{displayTitle}</span>
-                  {!mobile && <span className={`sub ${connection === 'synced' ? 'ok' : 'busy'}`}>
+                  {!mobile && <span className={`sub ${connection === 'synced' ? 'ok' : connection === 'syncing' ? 'busy' : ''}`}>
                     <span className="dot" />
-                    {connection === 'synced' ? '消息已同步' : '正在同步'}
+                    {connection === 'synced' ? '消息已同步' : connection === 'syncing' ? '正在同步' : '在线'}
                   </span>}
                 </span>
               </span>

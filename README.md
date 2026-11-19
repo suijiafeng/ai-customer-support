@@ -32,7 +32,7 @@ A full-stack support desk: an embeddable widget, local FAQ by default, and a liv
 
 ![客服工作台](./docs/screenshots/workstation-session-desktop.png)
 
-接待大厅里未被认领的会话对所有客服可见。客服发出第一条回复即把会话归给自己；已经归别人时，非管理员再回复会得到 409。右侧是意图、情绪和命中的知识库。
+接待大厅只列出已经转人工、还没被客服认领的会话。仍由本地 FAQ 接待的会话出现在下方「全部」，不计入数据概览的待跟进。客服发出第一条回复即把会话归给自己；已经归别人时，非管理员再回复会得到 409。右侧是意图、情绪和命中的知识库。
 
 ![数据概览](./docs/screenshots/workstation-metrics-desktop.png)
 
@@ -268,7 +268,6 @@ scripts              start.js、smoke、对话回归、截图
 - 运行时热集合在内存里。多实例不会互相广播 SSE。
 - 每日趋势约 30 分钟写一次。`DB_DRIVER=memory` 时重启即清空。
 - 访客挂件的图片发送入口是关的（`imageEnabled = false`）。工作台仍可发送 data URL 图片，每张不超过 2MB，最多 4 张，不适合当作生产里的对象存储。
-- 首条访客消息发出时，会话 SSE 会在访客令牌签发之前就去连接，界面会停在「正在同步」。刷新之后令牌已经在本地，状态会变成「消息已同步」。
 - `npm run start -- dev` 的预构建产物不能直接当 3001 的挂件用，见快速开始。
 - 仓库没有约定对外的部署 URL。`docs/FEATURE-IDEAS.md` 是对照其他开源客服产品整理的想法，不是已排期的功能。`docs/ARCHITECTURE.md` 写的是更早的 Socket.IO / Prisma 方案，文件开头已标明过时。
 

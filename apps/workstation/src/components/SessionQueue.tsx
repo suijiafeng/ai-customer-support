@@ -112,7 +112,8 @@ interface SessionQueueProps {
 }
 
 // 参考主流客服平台（Zendesk/Intercom/千牛）：按"球在谁那边"分类
-// 待回复=访客最后发言（我的待办）；处理中=我已回复等访客；全部=所有客服进行中；已结束=历史
+// 接待大厅=已转人工且还没人认领。AI 仍在答的会话不是待接待，放进「全部」，也不计入待跟进。
+// 待回复=访客最后发言（我的待办）；处理中=我已回复等访客；全部=所有进行中（不含大厅）；已结束=历史
 type Filter = 'reply' | 'active' | 'all' | 'closed';
 
 const FILTERS: Array<{ key: Filter; label: string }> = [
@@ -155,7 +156,9 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
 
   const { pool, others, poolTotal, tabUnread, unreadTotal } = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
-    const isPool = (s: SessionSummary) => !s.assignedAgentId && s.status !== 'closed';
+    // 只收明确转人工、尚未被认领的会话。未认领的 FAQ 对话 status 仍是 bot，
+    // 若把它们算进大厅，「全部」会被掏空，数据概览的待跟进（只数 waiting_human）也对不上。
+    const isPool = (s: SessionSummary) => s.status === 'waiting_human';
     const isClosed = (s: SessionSummary) => isDone(s.status);
     const isMine = (s: SessionSummary) => s.assignedAgentId === agent?.id;
     // 访客最后发言 = 客服欠一条回复（旧后端无此字段时视为已回复，降级不误报）
