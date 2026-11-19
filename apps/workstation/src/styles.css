@@ -234,8 +234,8 @@ button { font-family: inherit; }
   border: 1px solid #e6e7ea; }
 .ep { display: flex; flex-direction: column; }
 .ep-tabs { display: flex; border-bottom: 1px solid #e6e7ea; padding: 4px 6px 0; gap: 2px; }
-.ep-tab { background: none; border: none; cursor: pointer; font-size: 13px; color: #52525b; padding: 6px 8px; }
-  border-radius: 8px 8px 0 0; line-height: 1; border-bottom: 2px solid transparent; transition: background .1s; }
+.ep-tab { background: none; border: none; cursor: pointer; font-size: 13px; color: #52525b; padding: 6px 8px;
+  border-radius: 8px 8px 0 0; line-height: 1; border-bottom: 2px solid transparent; transition: background 150ms ease-out; }
 .ep-tab:hover { background: #f8f9fa; }
 .ep-tab.active { border-bottom-color: #0d9488; background: #e6f7f5; }
 .ep-grid { display: grid; grid-template-columns: repeat(8, 1fr); padding: 6px; gap: 2px;
