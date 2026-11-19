@@ -547,21 +547,21 @@ function dailyOption(points: Array<{ date: string; count: number }>): echarts.EC
       data: points.map((point) => point.date.slice(5)),
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: '#71717a', fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+      axisLabel: { color: '#989a9e', fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
     },
     yAxis: {
       type: 'value',
       minInterval: 1,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: '#71717a', fontSize: 11 },
-      splitLine: { lineStyle: { color: '#e4e4e7', type: 'dashed' } },
+      axisLabel: { color: '#989a9e', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#f1f3f5', type: 'dashed' } },
     },
     series: [{
       type: 'bar',
       data: points.map((point) => point.count),
       barMaxWidth: 16,
-      itemStyle: { color: '#0d9488' },
+      itemStyle: { color: '#99d5cf' },
     }],
   };
 }

@@ -9,10 +9,10 @@ const MAX_DAYS = 14;
 const TREND_H = 200;
 
 // 同一青绿的明度阶梯，避免蓝橙撞色；已关闭用中性灰
-const C_AI = '#0f766e';
-const C_ASSIGNED = '#5eead4';
-const C_WAITING = '#115e59';
-const C_CLOSED = '#d4d4d8';
+const C_AI = '#0d9488';
+const C_ASSIGNED = '#2a78d6';
+const C_WAITING = '#eb6834';
+const C_CLOSED = '#d0d3d7';
 // 轴线 / 网格 / 文字：一律中性灰，退到数据后面
 const AXIS = '#e6e7ea';
 const TICK = '#989a9e';
@@ -86,7 +86,7 @@ export default function MetricsPanel() {
       axisLine: { show: false },
       axisTick: { show: false },
       axisLabel: { color: TICK, fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
-      splitLine: { lineStyle: { color: '#e4e4e7', type: 'dashed' } },
+      splitLine: { lineStyle: { color: '#f1f3f5', type: 'dashed' } },
     },
     series: [
       { name: '活跃会话', data: history.map((h) => h.activeSessions) },
