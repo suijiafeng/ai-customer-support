@@ -1,20 +1,20 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DailyMetricPoint, Metrics } from '@assistflow/shared';
-import * as echarts from 'echarts';
+import type * as echarts from 'echarts';
 import { fmtTime, requestJson } from '../api.js';
+import EChart from '../ui/EChart.js';
 import Icon from '../ui/Icon.js';
 
 const MAX_DAYS = 14;
 const TREND_H = 200;
 
-// 图表配色：品牌青 + 蓝 + 橙（已过色盲可辨性校验）；「已关闭」用灰色弱化，只作背景
-const C_AI = '#0d9488';
-const C_ASSIGNED = '#2a78d6';
-const C_WAITING = '#eb6834';
-const C_CLOSED = '#d0d3d7';
+// 同一青绿的明度阶梯，避免蓝橙撞色；已关闭用中性灰
+const C_AI = '#0f766e';
+const C_ASSIGNED = '#5eead4';
+const C_WAITING = '#115e59';
+const C_CLOSED = '#d4d4d8';
 // 轴线 / 网格 / 文字：一律中性灰，退到数据后面
 const AXIS = '#e6e7ea';
-const GRID = '#f1f3f5';
 const TICK = '#989a9e';
 const LEGEND = '#6c6f72';
 
@@ -77,13 +77,16 @@ export default function MetricsPanel() {
     xAxis: {
       type: 'category', boundaryGap: false,
       data: history.map((h) => h.date.slice(5)),
-      axisLine: { lineStyle: { color: AXIS } }, axisTick: { show: false },
-      axisLabel: { color: TICK, fontSize: 11 },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: TICK, fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
     },
     yAxis: {
       type: 'value', minInterval: 1,
-      axisLabel: { color: TICK, fontSize: 11 },
-      splitLine: { lineStyle: { color: GRID, type: 'solid' } },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: TICK, fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+      splitLine: { lineStyle: { color: '#e4e4e7', type: 'dashed' } },
     },
     series: [
       { name: '活跃会话', data: history.map((h) => h.activeSessions) },
@@ -92,9 +95,10 @@ export default function MetricsPanel() {
     ].map((s) => ({
       ...s,
       type: 'line' as const,
+      smooth: false,
       showSymbol: false,
-      symbolSize: 8,
-      lineStyle: { width: 2 },
+      symbolSize: 6,
+      lineStyle: { width: 1.5 },
       emphasis: { focus: 'series' as const },
     })),
   }), [history]);
@@ -196,28 +200,3 @@ function ChartEmpty({ height, text = '暂无数据' }: { height: number; text?: 
   );
 }
 
-/** ECharts 容器：负责 init / setOption / 自适应 resize / 销毁。 */
-function EChart({ option, height }: { option: echarts.EChartsOption; height: number }) {
-  const elRef = useRef<HTMLDivElement | null>(null);
-  const chartRef = useRef<echarts.ECharts | null>(null);
-
-  useEffect(() => {
-    if (!elRef.current) return;
-    const chart = echarts.init(elRef.current);
-    chartRef.current = chart;
-    // 容器尺寸变化即重绘：覆盖窗口缩放、栏目折叠、断点切换等所有自适应场景
-    const ro = new ResizeObserver(() => chart.resize());
-    ro.observe(elRef.current);
-    return () => {
-      ro.disconnect();
-      chart.dispose();
-      chartRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    chartRef.current?.setOption(option, true);
-  }, [option]);
-
-  return <div ref={elRef} style={{ width: '100%', height }} />;
-}

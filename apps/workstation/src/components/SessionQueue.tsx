@@ -84,7 +84,7 @@ const SessionItem = memo(function SessionItem({ s, active, unread, onSelect }: S
           <span className="name" title={s.displayName}>{visitorDisplayName(s.displayName)}</span>
           {waiting && <span className="human-tag" title="访客请求人工接待">人工</span>}
           {!done && s.priority === 'high' && <span className="prio-tag" title="高优先级">急</span>}
-          {!done && s.sentiment === 'negative' && <span className="mood-tag" title="客户情绪负面，请优先安抚">⚠</span>}
+          {!done && s.sentiment === 'negative' && <span className="mood-tag" title="客户情绪负面，请优先安抚"><Icon name="alert-triangle" size={14} /></span>}
           <span className={`sess-time${waiting ? ' waiting' : ''}`}>
             {waiting ? waitingFor(s.updatedAt) : fmtListTime(s.updatedAt)}
           </span>
@@ -112,7 +112,8 @@ interface SessionQueueProps {
 }
 
 // 参考主流客服平台（Zendesk/Intercom/千牛）：按"球在谁那边"分类
-// 待回复=访客最后发言（我的待办）；处理中=我已回复等访客；全部=所有客服进行中；已结束=历史
+// 接待大厅=已转人工且还没人认领。AI 仍在答的会话不是待接待，放进「全部」，也不计入待跟进。
+// 待回复=访客最后发言（我的待办）；处理中=我已回复等访客；全部=所有进行中（不含大厅）；已结束=历史
 type Filter = 'reply' | 'active' | 'all' | 'closed';
 
 const FILTERS: Array<{ key: Filter; label: string }> = [
@@ -127,6 +128,8 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
   const [keyword, setKeyword] = useState('');
   const [poolOpen, setPoolOpen] = useState(false);
   const [listOpen, setListOpen] = useState(true);
+  // 有待接待访客时默认展开大厅。用户手动折叠后不再自动打开。
+  const poolTouched = useRef(false);
 
   // 未读标记：messageCount 超过已读基线即未读；打开会话即更新基线
   const seenRef = useRef<Record<string, number>>({});
@@ -153,7 +156,9 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
 
   const { pool, others, poolTotal, tabUnread, unreadTotal } = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
-    const isPool = (s: SessionSummary) => !s.assignedAgentId && s.status !== 'closed';
+    // 只收明确转人工、尚未被认领的会话。未认领的 FAQ 对话 status 仍是 bot，
+    // 若把它们算进大厅，「全部」会被掏空，数据概览的待跟进（只数 waiting_human）也对不上。
+    const isPool = (s: SessionSummary) => s.status === 'waiting_human';
     const isClosed = (s: SessionSummary) => isDone(s.status);
     const isMine = (s: SessionSummary) => s.assignedAgentId === agent?.id;
     // 访客最后发言 = 客服欠一条回复（旧后端无此字段时视为已回复，降级不误报）
@@ -209,6 +214,14 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
     return { pool, others, poolTotal, tabUnread, unreadTotal };
   }, [sessions, filter, keyword, agent, activeId]);
 
+  useEffect(() => {
+    if (!poolTouched.current && poolTotal > 0) setPoolOpen(true);
+  }, [poolTotal]);
+  const togglePool = useCallback(() => {
+    poolTouched.current = true;
+    setPoolOpen((v) => !v);
+  }, []);
+
   const renderItem = (s: SessionSummary) => (
     <SessionItem key={s.sessionId} s={s} active={s.sessionId === activeId} unread={unreadCount(s)} onSelect={onSelect} />
   );
@@ -232,8 +245,8 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
             role="button"
             tabIndex={0}
             aria-expanded={poolOpen}
-            onClick={() => setPoolOpen((v) => !v)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPoolOpen((v) => !v); } }}
+            onClick={togglePool}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePool(); } }}
           >
             <Icon name="inbox" size={16} />
             <span className="q-section-title">接待大厅</span>
@@ -287,7 +300,9 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
                 {others.map(renderItem)}
                 {!others.length && (
                   <div className="section-empty">
-                    {filter === 'reply' ? '没有待回复的会话，干得漂亮' : '暂无会话'}
+                    {filter === 'reply'
+                      ? (poolTotal > 0 ? '没有待回复的会话，接待大厅还有访客在等' : '没有待回复的会话，干得漂亮')
+                      : '暂无会话'}
                   </div>
                 )}
               </div>

@@ -51,6 +51,8 @@ export class StoreService implements OnModuleInit, OnModuleDestroy {
   saveTicket = (ticket: Parameters<Store['saveTicket']>[0]) => this.store.saveTicket(ticket);
   saveWidgetKey = (key: Parameters<Store['saveWidgetKey']>[0]) => this.store.saveWidgetKey(key);
   deleteWidgetKey = (key: string) => this.store.deleteWidgetKey(key);
+  saveAgentAudit = (entry: Parameters<Store['saveAgentAudit']>[0]) => this.store.saveAgentAudit(entry);
+  loadAgentAudit = (sessionId: string) => this.store.loadAgentAudit(sessionId);
 
   loadSession = (id: string) => this.store.getSession(id);
   loadConversation = (id: string) => this.store.getConversation(id);

@@ -17,6 +17,7 @@ import { SessionsService } from '../sessions/sessions.service.js';
 import { TicketsService } from '../tickets/tickets.service.js';
 import { SessionTicketService } from '../workflow/session-ticket.service.js';
 import { WidgetKeysService } from '../widget-keys/widget-keys.service.js';
+import { AgentService } from '../agent/agent.service.js';
 
 @Injectable()
 export class ChatService {
@@ -26,7 +27,8 @@ export class ChatService {
     private readonly sessions: SessionsService,
     private readonly tickets: TicketsService,
     private readonly sessionTicket: SessionTicketService,
-    private readonly widgetKeys: WidgetKeysService
+    private readonly widgetKeys: WidgetKeysService,
+    private readonly agent: AgentService,
   ) {}
 
   /**
@@ -214,6 +216,41 @@ export class ChatService {
 
     // 租户在「租户管理」里指定了模型就用它，否则（或该模型不可用）用默认模型
     const tenantModelId = this.widgetKeys.get(tenantKey)?.modelId;
+    if (message) {
+      const agentTurn = await this.agent.handleUtterance({ message, sessionId, tenantKey, modelId: tenantModelId });
+      if (agentTurn?.handled) {
+        const assistant = this.sessions.createMessage({
+          role: 'assistant',
+          actor: 'ai',
+          content: agentTurn.reply,
+          agentAction: agentTurn.action,
+          agentTrace: agentTurn.traces,
+        });
+        const nextHistory = this.sessions.appendMessages(
+          storedHistory,
+          this.sessions.createMessage({ role: 'user', actor: 'customer', content: message, attachments, clientMessageId }),
+          assistant,
+        );
+        const ticket = agentTurn.handoff ? this.tickets.getLatestForSession(sessionId) : null;
+        const workflow: Workflow = {
+          ai: { provider: this.ai.provider, model: this.ai.getActiveModel(), used: false, fallback: agentTurn.degraded, error: null },
+          intent: agentTurn.handoff ? 'human_handoff' : 'agent_tool',
+          sentiment: detectSentiment(message),
+          needHuman: agentTurn.handoff,
+          reason: agentTurn.handoff ? '客服 Agent 转人工' : '客服 Agent 调用了工具',
+          inquiry: null,
+          ticket,
+          sources: [],
+        };
+        this.sessions.setConversation(sessionId, nextHistory);
+        this.sessions.upsertSession({
+          sessionId, message, workflow, profile, visitor, tenantKey,
+          ...(agentTurn.handoff ? { forceStatus: 'waiting_human' as const } : {}),
+        });
+        this.sessionTicket.notify(sessionId);
+        return { sessionId, reply: agentTurn.reply, session: this.sessions.get(sessionId)!, messages: nextHistory, ...workflow };
+      }
+    }
     const conn = this.ai.connectionFor(tenantModelId);
     const matchedFaqs = this.knowledge.searchFaqs(message);
     const inquiry = this.knowledge.findInquiry(message);
@@ -275,5 +312,54 @@ export class ChatService {
       messages: nextHistory,
       ...workflow,
     };
+  }
+
+  /** 访客确认或取消待执行的工具。调用方已经核过访客令牌和租户。 */
+  async decideAgentAction(body: { sessionId: string; actionId: string; decision: 'confirm' | 'cancel'; siteKey?: string | null }) {
+    const sessionId = String(body.sessionId || '');
+    await this.sessions.loadDetail(sessionId);
+    const tenantKey = String(body.siteKey || '').trim() || null;
+    const turn = await this.agent.decide({
+      sessionId,
+      actionId: body.actionId,
+      decision: body.decision,
+      tenantKey,
+      message: body.decision === 'confirm' ? '访客确认办理' : '访客取消办理',
+    });
+    const history = this.sessions.getMessages(sessionId).map((message) => (
+      message.agentAction?.id === body.actionId && turn.action
+        ? { ...message, agentAction: { ...message.agentAction, status: turn.action.status } }
+        : message
+    ));
+    const nextHistory = this.sessions.appendMessages(
+      history,
+      this.sessions.createMessage({
+        role: 'assistant',
+        actor: 'ai',
+        content: turn.reply,
+        agentTrace: turn.traces,
+      }),
+    );
+    this.sessions.setConversation(sessionId, nextHistory);
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      this.sessions.upsertSession({
+        sessionId,
+        message: turn.reply,
+        workflow: session.workflow || {
+          ai: { provider: this.ai.provider, model: this.ai.getActiveModel(), used: false, fallback: false, error: null },
+          intent: 'agent_tool',
+          sentiment: 'neutral',
+          needHuman: false,
+          reason: '访客处理了待确认操作',
+          inquiry: null,
+          ticket: null,
+          sources: [],
+        },
+        ...(turn.handoff ? { forceStatus: 'waiting_human' as const } : {}),
+      });
+    }
+    this.sessionTicket.notify(sessionId);
+    return { sessionId, reply: turn.reply, session: this.sessions.get(sessionId)!, messages: nextHistory };
   }
 }

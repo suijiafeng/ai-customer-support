@@ -92,6 +92,11 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     return appConfig.aiFeatureEnabled && Boolean(this.clientFor(this.connectionFor(modelId)));
   }
 
+  clientForModel(modelId?: string | null): OpenAI | null {
+    if (!appConfig.aiFeatureEnabled) return null;
+    return this.clientFor(this.connectionFor(modelId));
+  }
+
   getActiveClient(): OpenAI | null {
     if (!appConfig.aiFeatureEnabled) {
       return null;

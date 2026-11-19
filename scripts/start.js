@@ -51,6 +51,11 @@ const childEnv = {
 if (mode === 'dev' || mode === 'demo') {
   childEnv.BACKEND_URL = process.env.BACKEND_URL || backendUrl();
 }
+// demo 模式会把 NODE_ENV 设为 production，但只用于本机演示。未显式关闭时放行种子口令。
+// Docker / Render / 直接 node 启动不会走这里，生产环境默认拒绝已公开的 123456。
+if (mode === 'demo' && String(process.env.ALLOW_DEMO_CREDENTIALS ?? '').trim() === '') {
+  childEnv.ALLOW_DEMO_CREDENTIALS = 'true';
+}
 
 console.log(`[start] mode=${mode} -> npm run ${scriptName}`);
 if (childEnv.BACKEND_URL) console.log(`[start] proxy backend = ${childEnv.BACKEND_URL}`);

@@ -37,6 +37,14 @@ const row = (extra = {}) => ({
   ...extra,
 });
 
+test('agentTools 只保留已知工具并写穿透', async () => {
+  const { svc, store } = await makeService([row()]);
+  const updated = svc.update('acme', { agentTools: { query_order: false, nope: true, request_refund: true } });
+  assert.deepEqual(updated.agentTools, { query_order: false, request_refund: true });
+  assert.equal(store.saved.at(-1).agentTools.query_order, false);
+  assert.equal(svc.get('acme').agentTools.query_order, false);
+});
+
 test('空表启动时自动种一个 demo 租户（固定ID与密钥、启用状态）', async () => {
   const { svc, store } = await makeService([]);
 

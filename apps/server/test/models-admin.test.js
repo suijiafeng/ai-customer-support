@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  ModelSettingsService, isProviderKeyConfigured, keySourceOf, maskKey, RESERVED_DEEPSEEK_ID,
+  ModelSettingsService, isProviderKeyConfigured, isTrustedModelBaseUrl, keySourceOf, maskKey, RESERVED_DEEPSEEK_ID,
 } from '../dist/ai/model-settings.service.js';
 
 async function makeService(settings) {
@@ -86,6 +86,10 @@ test('新增模型：未知厂商 / 自定义缺地址 / 非法地址 抛错', a
     await assert.rejects(() => svc.createModel({ provider: 'custom', model: 'x' }), /接口地址/);
     await assert.rejects(() => svc.createModel({ provider: 'openai', baseUrl: 'ftp://x' }), /http/);
     await assert.rejects(() => svc.createModel({ provider: 'openai', baseUrl: 'not a url' }), /格式/);
+    await assert.rejects(
+      () => svc.createModel({ provider: 'deepseek', baseUrl: 'https://evil.example@api.deepseek.com', apiKey: 'sk-own' }),
+      /用户名或密码/,
+    );
   } finally { await teardown(svc, dir); }
 });
 
@@ -198,6 +202,102 @@ test('旧格式迁移出的环境变量模型使用固定 ID（重启后租户�
     assert.equal(idA, 'env_zhipu');
     assert.equal(b.svc.getDefaultId(), idA);
   } finally { await teardown(b.svc, b.dir); }
+});
+
+test('自定义接口地址必须自带 Key，且绝不接收服务器环境变量 Key', async () => {
+  const saved = { ...process.env };
+  const sentinel = 'sk-server-sentinel-do-not-leak';
+  for (const k of ['AI_API_KEY', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'ZHIPU_API_KEY', 'MOONSHOT_API_KEY', 'OLLAMA_API_KEY']) {
+    process.env[k] = sentinel;
+  }
+  const { svc, dir } = await makeService(null);
+  try {
+    assert.equal(isTrustedModelBaseUrl('deepseek', ''), true);
+    assert.equal(isTrustedModelBaseUrl('deepseek', 'https://api.deepseek.com/v1'), true);
+    assert.equal(isTrustedModelBaseUrl('deepseek', 'https://API.DEEPSEEK.COM'), true);
+    assert.equal(isTrustedModelBaseUrl('openai', 'https://api.openai.com/v1'), true);
+    assert.equal(isTrustedModelBaseUrl('deepseek', 'http://api.deepseek.com'), false);
+    assert.equal(isTrustedModelBaseUrl('deepseek', 'https://api.deepseek.com:8443/v1'), false);
+    assert.equal(isTrustedModelBaseUrl('deepseek', 'https://api.deepseek.com.evil.example'), false);
+    assert.equal(isTrustedModelBaseUrl('deepseek', 'https://evil.example@api.deepseek.com'), false);
+    assert.equal(isTrustedModelBaseUrl('custom', 'https://api.deepseek.com'), false);
+
+    await assert.rejects(
+      () => svc.createModel({ provider: 'openai', baseUrl: 'https://attacker.invalid/v1' }),
+      /专属 API Key/,
+    );
+    await assert.rejects(
+      () => svc.createModel({ provider: 'deepseek', baseUrl: 'https://api.deepseek.com.evil.example/v1' }),
+      /专属 API Key/,
+    );
+    await assert.rejects(
+      () => svc.createModel({ provider: 'custom', baseUrl: 'https://llm.example/v1', model: 'm' }),
+      /专属 API Key/,
+    );
+
+    const official = await svc.createModel({ provider: 'deepseek', baseUrl: 'https://api.deepseek.com/v1' });
+    await svc.setDefault(official.id);
+    assert.equal(svc.getActiveConnection().apiKey, sentinel);
+
+    const openai = await svc.createModel({ provider: 'openai', baseUrl: 'https://api.openai.com/v1' });
+    await svc.setDefault(openai.id);
+    assert.equal(svc.getActiveConnection().apiKey, sentinel);
+
+    const owned = await svc.createModel({
+      provider: 'openai', baseUrl: 'https://attacker.invalid/v1', model: 'gpt-4o', apiKey: 'sk-customer-owned',
+    });
+    await svc.setDefault(owned.id);
+    const conn = svc.getActiveConnection();
+    assert.equal(conn.baseUrl, 'https://attacker.invalid/v1');
+    assert.equal(conn.apiKey, 'sk-customer-owned');
+    assert.equal(conn.apiKey.includes('sentinel'), false);
+
+    await assert.rejects(() => svc.updateModel(owned.id, { clearApiKey: true }), /专属 API Key/);
+    const plain = await svc.createModel({ provider: 'qwen' });
+    await assert.rejects(() => svc.updateModel(plain.id, { baseUrl: 'https://attacker.invalid/v1' }), /专属 API Key/);
+
+    const ollama = await svc.createModel({ provider: 'ollama', baseUrl: 'http://10.1.2.3:11434/v1' });
+    await svc.setDefault(ollama.id);
+    assert.equal(svc.getActiveConnection().baseUrl, 'http://10.1.2.3:11434/v1');
+    assert.equal(svc.getActiveConnection().apiKey, 'local');
+    assert.equal(keySourceOf(ollama), 'optional');
+  } finally {
+    await teardown(svc, dir);
+    for (const k of Object.keys(process.env)) delete process.env[k];
+    Object.assign(process.env, saved);
+  }
+});
+
+test('磁盘上已有的自定义地址没有专属 Key 时，不补环境变量 Key', async () => {
+  const saved = { ...process.env };
+  const sentinel = 'sk-server-sentinel-do-not-leak';
+  process.env.AI_API_KEY = sentinel;
+  process.env.OPENAI_API_KEY = sentinel;
+  const { svc, dir } = await makeService({
+    version: 2,
+    defaultId: 'mdl_evil',
+    models: [{
+      id: 'mdl_evil',
+      name: 'evil',
+      provider: 'openai',
+      baseUrl: 'https://attacker.invalid/v1',
+      model: 'gpt-4o',
+      apiKey: '',
+      enabled: true,
+      createdAt: '2020-01-01T00:00:00.000Z',
+      updatedAt: '2020-01-01T00:00:00.000Z',
+    }],
+  });
+  try {
+    const conn = svc.getActiveConnection();
+    assert.equal(conn.baseUrl, 'https://attacker.invalid/v1');
+    assert.equal(conn.apiKey, '');
+    assert.equal(keySourceOf(svc.listModels()[0]), 'none');
+  } finally {
+    await teardown(svc, dir);
+    for (const k of Object.keys(process.env)) delete process.env[k];
+    Object.assign(process.env, saved);
+  }
 });
 
 test('租户指定模型没有可用 Key 时回退默认模型', async () => {

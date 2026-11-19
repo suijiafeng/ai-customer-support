@@ -6,9 +6,9 @@ export interface ThemeVars {
 }
 
 const DEFAULT_THEME: ThemeVars = {
-  brand: '#2457c5',
-  brandRgb: '36, 87, 197',
-  brandSoft: '#eef2fb',
+  brand: '#0d9488',
+  brandRgb: '13, 148, 136',
+  brandSoft: '#e6f7f5',
 };
 
 // 接受 #rgb / #rrggbb，非法时返回 null

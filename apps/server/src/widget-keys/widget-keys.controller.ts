@@ -1,7 +1,7 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { AgentAuthGuard } from '../auth/auth.guard.js';
 import type { AuthenticatedAgent } from '../auth/auth.service.js';
-import { WidgetKeysService } from './widget-keys.service.js';
+import { AGENT_TOOL_NAMES, WidgetKeysService } from './widget-keys.service.js';
 import { ModelSettingsService } from '../ai/model-settings.service.js';
 
 /** 租户管理（原 Widget 接入密钥）：仅 admin 可创建/启停/删除。 */
@@ -44,13 +44,36 @@ export class WidgetKeysController {
   @Patch(':key')
   update(@Param('key') key: string, @Body() body: any, @Req() req: any) {
     this.assertAdmin(req.agent as AuthenticatedAgent);
-    const patch: { name?: string; domain?: string; remark?: string; active?: boolean; modelId?: string | null } = {};
+    const patch: { name?: string; domain?: string; remark?: string; active?: boolean; modelId?: string | null; agentTools?: Record<string, boolean> } = {};
     if (body?.name !== undefined) patch.name = body.name;
     if (body?.domain !== undefined) patch.domain = body.domain;
     if (body?.remark !== undefined) patch.remark = body.remark;
     if (body?.active !== undefined) patch.active = Boolean(body.active);
     if (body?.modelId !== undefined) patch.modelId = this.checkModelId(body.modelId);
+    if (body?.agentTools !== undefined) patch.agentTools = body.agentTools;
     return { key: this.widgetKeys.update(key, patch) };
+  }
+
+  @Get(':key/agent-tools')
+  getAgentTools(@Param('key') key: string, @Req() req: any) {
+    this.assertAdmin(req.agent as AuthenticatedAgent);
+    const tenant = this.widgetKeys.get(key);
+    if (!tenant) throw new NotFoundException({ error: 'widget key not found' });
+    return { tools: this.toolView(tenant.agentTools) };
+  }
+
+  @Put(':key/agent-tools')
+  setAgentTools(@Param('key') key: string, @Body() body: any, @Req() req: any) {
+    this.assertAdmin(req.agent as AuthenticatedAgent);
+    const tenant = this.widgetKeys.update(key, { agentTools: body?.tools ?? body?.agentTools ?? {} });
+    return { tools: this.toolView(tenant.agentTools) };
+  }
+
+  private toolView(flags: Record<string, boolean> | undefined) {
+    return AGENT_TOOL_NAMES.map((name) => ({
+      name,
+      enabled: !flags || flags[name] !== false,
+    }));
   }
 
   @Get(':key/stats')

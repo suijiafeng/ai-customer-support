@@ -44,6 +44,29 @@ export interface Store {
   deleteTicket(ticketId: string): Promise<void>;
   saveWidgetKey(key: WidgetKey): Promise<void>;
   deleteWidgetKey(key: string): Promise<void>;
+  /** 客服工具审计。data 里的参数摘要在写入前已经脱敏。 */
+  saveAgentAudit(entry: {
+    id: string;
+    sessionId: string;
+    tenantKey: string | null;
+    tool: string;
+    argsSummary: string;
+    status: string;
+    durationMs: number;
+    demo: boolean;
+    at: string;
+  }): Promise<void>;
+  loadAgentAudit(sessionId: string): Promise<Array<{
+    id: string;
+    sessionId: string;
+    tenantKey: string | null;
+    tool: string;
+    argsSummary: string;
+    status: string;
+    durationMs: number;
+    demo: boolean;
+    at: string;
+  }>>;
   /** 单条回读（内存淘汰后仍可从库取回，DB 为读的权威源） */
   getSession(sessionId: string): Promise<Session | null>;
   getConversation(sessionId: string): Promise<Message[] | null>;
@@ -169,6 +192,13 @@ function createPgStore(pool: pg.Pool, ownsPool: boolean): Store {
           data JSONB NOT NULL,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS agent_audit (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          data JSONB NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`);
     },
 
     // 启动时一次性载入内存。tickets/widget_keys 按 updated_at 升序，保持与内存数组的插入顺序近似。
@@ -278,6 +308,26 @@ function createPgStore(pool: pg.Pool, ownsPool: boolean): Store {
       );
     },
 
+    saveAgentAudit(entry) {
+      if (!entry?.id || !entry.sessionId) return Promise.resolve();
+      return fireAndForget(
+        pool.query(
+          `INSERT INTO agent_audit (id, session_id, data, created_at)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (id) DO NOTHING`,
+          [entry.id, entry.sessionId, JSON.stringify(entry), entry.at]
+        ),
+        `agent audit ${entry.id}`
+      );
+    },
+    async loadAgentAudit(sessionId) {
+      const res = await pool.query(
+        'SELECT data FROM agent_audit WHERE session_id = $1 ORDER BY created_at ASC',
+        [sessionId]
+      );
+      return res.rows.map((row) => row.data);
+    },
+
     async getSession(sessionId) {
       const res = await pool.query('SELECT data FROM sessions WHERE session_id = $1', [sessionId]);
       return res.rows[0]?.data ?? null;
@@ -368,6 +418,9 @@ function createSqliteStore(dbPath: string): Store {
       );
       db.exec(
         `CREATE TABLE IF NOT EXISTS widget_keys (key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL)`
+      );
+      db.exec(
+        `CREATE TABLE IF NOT EXISTS agent_audit (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL)`
       );
     },
 
@@ -467,6 +520,22 @@ function createSqliteStore(dbPath: string): Store {
       );
     },
 
+    saveAgentAudit(entry) {
+      if (!entry?.id || !entry.sessionId) return Promise.resolve();
+      return safe(`agent audit ${entry.id}`, () =>
+        db.prepare(
+          `INSERT INTO agent_audit (id, session_id, data, created_at) VALUES (?, ?, ?, ?)
+           ON CONFLICT(id) DO NOTHING`
+        ).run(entry.id, entry.sessionId, JSON.stringify(entry), entry.at)
+      );
+    },
+    async loadAgentAudit(sessionId) {
+      const rows: any[] = db
+        .prepare('SELECT data FROM agent_audit WHERE session_id = ? ORDER BY created_at ASC')
+        .all(sessionId);
+      return rows.map((row) => JSON.parse(row.data));
+    },
+
     async getSession(sessionId) {
       const row: any = db.prepare('SELECT data FROM sessions WHERE session_id = ?').get(sessionId);
       return row ? (JSON.parse(row.data) as Session) : null;
@@ -519,6 +588,8 @@ function createNoopStore(): Store {
     deleteTicket: noop,
     saveWidgetKey: noop,
     deleteWidgetKey: noop,
+    saveAgentAudit: noop,
+    loadAgentAudit: async () => [],
     getSession: async () => null,
     getConversation: async () => null,
     getTicket: async () => null,

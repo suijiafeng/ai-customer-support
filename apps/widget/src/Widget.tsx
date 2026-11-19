@@ -154,6 +154,7 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
     onListScroll,
     send,
     retrySend,
+    decideAction,
     humanAssigned,
     switchToAi,
   } = useChatSession({
@@ -307,13 +308,13 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
             >
               <span className="title">
                 <span className="logo" aria-hidden="true">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="13" y2="12"/></svg>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="13" y2="12"/></svg>
                 </span>
                 <span className="title-text">
                   <span className="title-name">{displayTitle}</span>
-                  {!mobile && <span className={`sub ${connection === 'synced' ? 'ok' : 'busy'}`}>
+                  {!mobile && <span className={`sub ${connection === 'synced' ? 'ok' : connection === 'syncing' ? 'busy' : ''}`}>
                     <span className="dot" />
-                    {connection === 'synced' ? '消息已同步' : '正在同步'}
+                    {connection === 'synced' ? '消息已同步' : connection === 'syncing' ? '正在同步' : '在线'}
                   </span>}
                 </span>
               </span>
@@ -389,6 +390,20 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
                           </div>
                         )}
                       </div>
+                      {m.agentAction?.status === 'pending' && (
+                        <div className="agent-card" role="group" aria-label={m.agentAction.title}>
+                          <div className="agent-card-title">{m.agentAction.title}</div>
+                          <p>{m.agentAction.summary}</p>
+                          {m.agentAction.demo && <div className="agent-demo">演示数据，不是真实订单系统</div>}
+                          <div className="agent-card-actions">
+                            <button type="button" onClick={() => decideAction(m.agentAction!.id, 'cancel')}>取消</button>
+                            <button type="button" className="primary" onClick={() => decideAction(m.agentAction!.id, 'confirm')}>确认</button>
+                          </div>
+                        </div>
+                      )}
+                      {m.agentAction && m.agentAction.status !== 'pending' && (
+                        <div className="agent-card done">{m.agentAction.status === 'cancelled' ? '已取消' : m.agentAction.status === 'done' ? '已办理' : '未完成'}</div>
+                      )}
                       {m.from === 'customer' && m.status === 'sending' && (
                         <div className="msg-status">发送中…</div>
                       )}
@@ -474,7 +489,7 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
                     title="表情"
                     onClick={toggleEmoji}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 13s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 13s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
                   </button>
                   <button
                     className={`tool${showQuick ? ' active' : ''}`}
@@ -482,12 +497,12 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
                     aria-pressed={showQuick}
                     onClick={() => { setShowQuick((v) => !v); closeEmoji(); }}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                   </button>
                   {imageEnabled && (
                     <>
                       <button className="tool" title="发送图片/截图" onClick={() => fileEl.current?.click()}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                       </button>
                       <input type="file" accept="image/*" multiple hidden ref={fileEl} onChange={onPickFiles} />
                     </>
@@ -523,7 +538,7 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
           }}
           aria-label={unread > 0 ? `有 ${unread} 条新消息` : '打开客服'}
         >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
           {unread > 0 && <span className="fab-badge">{unread > 99 ? '99+' : unread}</span>}

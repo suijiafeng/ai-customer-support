@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { fmtTime, requestJson } from '../api.js';
 import { showToast, confirmDialog } from '../ui/feedback.js';
 import Icon from '../ui/Icon.js';
+import Select from '../ui/Select.js';
 
 type KeySource = 'custom' | 'env' | 'optional' | 'none';
 
@@ -310,7 +311,7 @@ export default function ModelsPanel() {
           </table>
         </div>
         <p className="form-hint model-rules">
-          规则：至少保留一个模型；默认模型不能删除或停用；被租户指定的模型需先在租户管理中更换才能删除（停用后这些租户自动回退默认模型）。API Key 留空时使用服务端环境变量（<code className="mono">&lt;厂商&gt;_API_KEY</code> 或 <code className="mono">AI_API_KEY</code>）。
+          规则：至少保留一个模型；默认模型不能删除或停用；被租户指定的模型需先在租户管理中更换才能删除（停用后这些租户自动回退默认模型）。接口地址留空时使用厂商预设，API Key 留空时使用服务端环境变量（<code className="mono">&lt;厂商&gt;_API_KEY</code> 或 <code className="mono">AI_API_KEY</code>）。填写预设之外的地址时必须填写该地址专属的 Key，服务器不会把环境变量中的 Key 发到自定义地址。
         </p>
       </section>
 
@@ -324,9 +325,12 @@ export default function ModelsPanel() {
             </label>
             <label className="form-field">
               <span>厂商</span>
-              <select value={form.provider} onChange={(e) => changeProvider(e.target.value)}>
-                {data.providers.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
-              </select>
+              <Select
+                value={form.provider}
+                onChange={changeProvider}
+                ariaLabel="厂商"
+                options={data.providers.map((p) => ({ value: p.key, label: p.label }))}
+              />
             </label>
             <label className="form-field">
               <span>模型 ID</span>
@@ -341,7 +345,7 @@ export default function ModelsPanel() {
                 placeholder={formPreset?.baseUrl || (form.provider === 'custom' ? 'https://your-llm.example.com/v1' : 'OpenAI 官方地址')}
               />
             </label>
-            <p className="form-hint">留空使用厂商预设地址。</p>
+            <p className="form-hint">留空使用厂商预设地址。填写非官方地址时必须同时填写专属 API Key。</p>
             <label className="form-field">
               <span>API Key（可选）</span>
               <input

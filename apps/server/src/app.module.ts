@@ -21,6 +21,9 @@ import { TicketsService } from './tickets/tickets.service.js';
 import { SessionTicketService } from './workflow/session-ticket.service.js';
 import { WidgetKeysController } from './widget-keys/widget-keys.controller.js';
 import { WidgetKeysService } from './widget-keys/widget-keys.service.js';
+import { AgentService } from './agent/agent.service.js';
+import { AgentActionService } from './agent/actions.js';
+import { AgentAuditService } from './agent/audit.js';
 
 @Module({
   imports: [
@@ -54,6 +57,9 @@ import { WidgetKeysService } from './widget-keys/widget-keys.service.js';
     MetricsService,
     SessionTicketService,
     WidgetKeysService,
+    AgentAuditService,
+    AgentActionService,
+    AgentService,
     ChatService,
   ],
 })

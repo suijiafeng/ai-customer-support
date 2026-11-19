@@ -39,6 +39,19 @@ export interface AuthenticatedAgent {
   role: AgentRole;
 }
 
+/** 仓库与 README 公开的演示口令。生产环境默认不能用它登录。 */
+const DEMO_PASSWORD = '123456';
+
+/**
+ * 本地开发（NODE_ENV 不是 production）始终允许演示口令。
+ * 生产环境只有显式 ALLOW_DEMO_CREDENTIALS=true/1/yes/on 才允许，便于一次性引导后关掉。
+ */
+function demoCredentialsAllowed(): boolean {
+  if (process.env.NODE_ENV !== 'production') return true;
+  const flag = String(process.env.ALLOW_DEMO_CREDENTIALS ?? '').trim().toLowerCase();
+  return flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
+}
+
 function resolveAuthSecret(): string {
   if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
   const dir = process.env.DATA_DIR || appConfig.dataDir;
@@ -89,10 +102,13 @@ export class AuthService implements OnModuleInit {
       await fs.readFile(path.join(this.dataDir, 'agents.json'), 'utf8')
     );
     if (process.env.NODE_ENV === 'production') {
-      const weak = this.accounts.filter((a) => verifyPassword('123456', a.salt, a.passwordHash));
+      const weak = this.accounts.filter((a) => verifyPassword(DEMO_PASSWORD, a.salt, a.passwordHash));
       if (weak.length) {
+        const ids = weak.map((a) => a.id).join(', ');
         this.logger.error(
-          `检测到 ${weak.length} 个账号使用演示弱口令（123456）：${weak.map((a) => a.id).join(', ')}。生产环境请立即替换 data/agents.json 的口令哈希。`
+          demoCredentialsAllowed()
+            ? `ALLOW_DEMO_CREDENTIALS 已开启，${weak.length} 个账号仍使用已公开的演示口令（${DEMO_PASSWORD}）：${ids}。引导完成后请修改密码并关闭该开关。`
+            : `已拒绝 ${weak.length} 个使用已公开演示口令（${DEMO_PASSWORD}）的账号登录：${ids}。生产环境请更换 data/agents.json 的口令；仅在一次性引导时设置 ALLOW_DEMO_CREDENTIALS=true。`
         );
       }
     }
@@ -100,9 +116,12 @@ export class AuthService implements OnModuleInit {
 
   login(agentNo: string, password: string): { token: string; agent: AuthenticatedAgent } | null {
     const account = this.accounts.find((item) => item.id === String(agentNo || '').trim());
-    if (!account || account.active === false || !verifyPassword(String(password || ''), account.salt, account.passwordHash)) {
+    const plain = String(password || '');
+    if (!account || account.active === false || !verifyPassword(plain, account.salt, account.passwordHash)) {
       return null;
     }
+    // 演示口令写在仓库和 README 里。生产环境直接拒绝，避免种子管理员被公开密码登录。
+    if (plain === DEMO_PASSWORD && !demoCredentialsAllowed()) return null;
     const role: AgentRole = account.role === 'admin' ? 'admin' : 'agent';
     return {
       token: signToken({ sub: account.id, name: account.name, role }, this.secret),
@@ -110,9 +129,23 @@ export class AuthService implements OnModuleInit {
     };
   }
 
+  /**
+   * 签名只证明令牌没被篡改。每次请求再对照当前账号：已删除或已停用立即失效，
+   * 角色和姓名以账号当前值为准，降级后的旧 token 不能继续当 admin。
+   */
+  private agentFromClaims(claims: { sub: string } | null): AuthenticatedAgent | null {
+    if (!claims) return null;
+    const account = this.accounts.find((item) => item.id === claims.sub);
+    if (!account || account.active === false) return null;
+    return {
+      id: account.id,
+      name: account.name,
+      role: account.role === 'admin' ? 'admin' : 'agent',
+    };
+  }
+
   verify(token: string): AuthenticatedAgent | null {
-    const claims = verifyToken(token, this.secret);
-    return claims ? { id: claims.sub, name: claims.name, role: claims.role } : null;
+    return this.agentFromClaims(verifyToken(token, this.secret));
   }
 
   // ---------- 账号运营管理（工作台「用户管理」页，仅 admin） ----------
@@ -237,8 +270,7 @@ export class AuthService implements OnModuleInit {
   }
 
   verifySseTicket(ticket: string): AuthenticatedAgent | null {
-    const claims = verifySseTicket(ticket, this.secret);
-    return claims ? { id: claims.sub, name: claims.name, role: claims.role } : null;
+    return this.agentFromClaims(verifySseTicket(ticket, this.secret));
   }
 
   /** 为访客签发绑定该 sessionId 的读取凭证（见 visitor-token.ts 的设计说明） */

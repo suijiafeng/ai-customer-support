@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { requestJson, getStoredAgent } from '../api.js';
 import { showToast, confirmDialog } from '../ui/feedback.js';
 import Icon from '../ui/Icon.js';
+import Select from '../ui/Select.js';
 
 interface AgentUser {
   id: string;
@@ -133,6 +134,7 @@ export default function UsersPanel() {
       </div>
 
       <section className="panel-block">
+        <div className="data-table-wrap">
         <table className="data-table">
           <thead>
             <tr><th>账号</th><th>姓名</th><th>角色</th><th>状态</th><th>操作</th></tr>
@@ -157,6 +159,7 @@ export default function UsersPanel() {
             ))}
           </tbody>
         </table>
+        </div>
         {users.length === 0 && <div className="empty">还没有账号，点击右上角新建</div>}
       </section>
 
@@ -184,10 +187,12 @@ export default function UsersPanel() {
             </label>
             <label className="form-field">
               <span>角色</span>
-              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as 'admin' | 'agent' })}>
-                <option value="agent">客服</option>
-                <option value="admin">管理员</option>
-              </select>
+              <Select
+                value={form.role}
+                onChange={(role) => setForm({ ...form, role: role as 'admin' | 'agent' })}
+                ariaLabel="角色"
+                options={[{ value: 'agent', label: '客服' }, { value: 'admin', label: '管理员' }]}
+              />
             </label>
             <label className="form-field">
               <span>{editing ? '新密码（留空则不修改，至少 6 位）' : '密码（至少 6 位）'}</span>

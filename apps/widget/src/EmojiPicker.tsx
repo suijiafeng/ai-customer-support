@@ -73,10 +73,9 @@ const EmojiPicker = memo(function EmojiPicker({ onSelect }: EmojiPickerProps) {
           <button
             key={i}
             className={`ep-tab${cat === i ? ' active' : ''}`}
-            title={c.label}
             onClick={() => setCat(i)}
           >
-            {c.icon}
+            {c.label}
           </button>
         ))}
       </div>

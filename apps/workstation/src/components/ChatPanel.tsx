@@ -7,7 +7,7 @@ import SessionDetail from './SessionDetail.js';
 import Icon from '../ui/Icon.js';
 import EmptyState from '../ui/EmptyState.js';
 import { useSessionMessages, type ConnectionStatus } from '../hooks/useSessionMessages.js';
-import { type AgentIdentity } from '../api.js';
+import { requestJson, type AgentIdentity } from '../api.js';
 
 const CONNECTION_LABEL: Record<ConnectionStatus, string> = {
   synced: '消息已同步',
@@ -35,6 +35,29 @@ function useDockedDetail(): boolean {
     return () => mq.removeEventListener('change', onChange);
   }, []);
   return docked;
+}
+
+function AgentAudit({ sessionId, tick }: { sessionId: string | null; tick: number }) {
+  const [entries, setEntries] = useState<Array<{ id: string; tool: string; status: string; argsSummary: string; durationMs: number; demo: boolean }>>([]);
+  useEffect(() => {
+    if (!sessionId) return;
+    let stop = false;
+    requestJson<{ entries: typeof entries }>(`/api/sessions/${encodeURIComponent(sessionId)}/agent-audit`)
+      .then((data) => { if (!stop) setEntries(data.entries || []); })
+      .catch(() => { if (!stop) setEntries([]); });
+    return () => { stop = true; };
+  }, [sessionId, tick]);
+  if (!entries.length) return null;
+  return (
+    <div className="agent-audit" aria-label="工具调用记录">
+      <div className="agent-audit-title">工具调用记录</div>
+      <ul>
+        {entries.map((entry) => (
+          <li key={entry.id}>{entry.demo ? '演示数据 · ' : ''}{entry.tool} · {entry.status} · {entry.argsSummary} · {entry.durationMs}ms</li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function pageHost(url?: string | null): string {
@@ -134,6 +157,7 @@ export default function ChatPanel({ session, agent }: ChatPanelProps) {
               发送消息即接待并归入「我的会话」
             </div>
           )}
+          <AgentAudit sessionId={sessionId} tick={messages.length} />
           <Composer sessionId={sessionId} agent={agent} onSent={applyServer} />
         </div>
         {detailVisible && (

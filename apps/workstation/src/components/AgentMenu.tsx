@@ -13,11 +13,9 @@ interface AgentMenuProps {
   variant?: 'pill' | 'card';
 }
 
-// 头像底色：按工号取色，三个客服各不相同
-const AVATAR_COLORS = ['#7c3aed', '#0e9f6e', '#d97706', '#0d9488'];
-function avatarColor(id: string): string {
-  const n = [...id].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-  return AVATAR_COLORS[n % AVATAR_COLORS.length];
+// 头像只用一种中性底，避免按工号铺一组彩色圆圈
+function avatarColor(): string {
+  return '#3f3f46';
 }
 
 /** 右上角客服入口：触发器只显示头像+名称，点击下拉展开个人详情与操作。 */
@@ -52,7 +50,7 @@ export default function AgentMenu({ agent, sessions, connected, onLogout, varian
   const waiting = sessions.filter((s) => s.status === 'waiting_human').length;
   const loginAt = getLoginAt();
   const initials = agent.id.slice(-2);
-  const color = avatarColor(agent.id);
+  const color = avatarColor();
 
   return (
     <div className={`agent-menu agent-menu--${variant}`} ref={wrapEl}>
