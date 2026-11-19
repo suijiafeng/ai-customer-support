@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import type * as echarts from 'echarts';
 import type { Tenant, TenantStats } from '@assistflow/shared';
 import { fmtTime, requestJson } from '../api.js';
 import { showToast, confirmDialog } from '../ui/feedback.js';
+import EChart from '../ui/EChart.js';
 import Icon from '../ui/Icon.js';
 import EmptyState from '../ui/EmptyState.js';
+import Select from '../ui/Select.js';
 
 const PAGE_SIZE = 10;
 
@@ -95,19 +98,16 @@ function ModelSelect({
   const usable = models.filter((m) => m.enabled);
   const current = value ? models.find((m) => m.id === value) : undefined;
   const staleValue = value && (!current || !current.enabled);
-  return (
-    <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">跟随默认模型{def ? `（${def.name} · ${def.model}）` : ''}</option>
-      {usable.map((m) => (
-        <option key={m.id} value={m.id}>{m.name} · {m.model}{m.isDefault ? '（默认）' : ''}</option>
-      ))}
-      {staleValue && (
-        <option value={value} disabled>
-          {current ? `${current.name}（已停用，当前回退默认）` : '原模型已删除（当前回退默认）'}
-        </option>
-      )}
-    </select>
-  );
+  const options = [
+    { value: '', label: `跟随默认模型${def ? `（${def.name} · ${def.model}）` : ''}` },
+    ...usable.map((m) => ({ value: m.id, label: `${m.name} · ${m.model}${m.isDefault ? '（默认）' : ''}` })),
+    ...(staleValue ? [{
+      value,
+      label: current ? `${current.name}（已停用，当前回退默认）` : '原模型已删除（当前回退默认）',
+      disabled: true,
+    }] : []),
+  ];
+  return <Select id={id} value={value} onChange={onChange} options={options} ariaLabel="租户模型" />;
 }
 
 /** 租户管理：admin 专属。支持名称/ID 搜索、分页；弹窗创建；密钥脱敏显示、点击复制。 */
@@ -538,6 +538,34 @@ function CreateTenantModal({ models, onClose, onCreated }: { models: ModelOption
   );
 }
 
+function dailyOption(points: Array<{ date: string; count: number }>): echarts.EChartsOption {
+  return {
+    grid: { left: 28, right: 8, top: 12, bottom: 24 },
+    tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#e4e4e7', textStyle: { color: '#18181b', fontSize: 12 } },
+    xAxis: {
+      type: 'category',
+      data: points.map((point) => point.date.slice(5)),
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: '#71717a', fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: '#71717a', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#e4e4e7', type: 'dashed' } },
+    },
+    series: [{
+      type: 'bar',
+      data: points.map((point) => point.count),
+      barMaxWidth: 16,
+      itemStyle: { color: '#0d9488' },
+    }],
+  };
+}
+
 const STATUS_LABEL: Record<string, string> = {
   bot: 'AI 回答中',
   waiting_human: '待跟进',
@@ -559,8 +587,6 @@ function TenantStatsModal({ tenant, onClose }: { tenant: Tenant; onClose: () => 
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [tenant.key]);
-
-  const maxDaily = stats ? Math.max(...stats.dailySessions.map((d) => d.count), 1) : 1;
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
@@ -595,20 +621,8 @@ function TenantStatsModal({ tenant, onClose }: { tenant: Tenant; onClose: () => 
 
             {/* 近 7 天趋势柱状图 */}
             <div className="stats-section">
-              <div className="stats-section-title">近 7 天会话趋势</div>
-              <div className="stats-bar-chart">
-                {stats.dailySessions.map(({ date, count }) => (
-                  <div key={date} className="stats-bar-col">
-                    <span className="stats-bar-count">{count || ''}</span>
-                    <div
-                      className="stats-bar"
-                      style={{ height: `${Math.round((count / maxDaily) * 60)}px` }}
-                      title={`${date}: ${count} 次`}
-                    />
-                    <span className="stats-bar-label">{date.slice(5)}</span>
-                  </div>
-                ))}
-              </div>
+              <div className="stats-section-title">近 7 天会话</div>
+              <EChart option={dailyOption(stats.dailySessions)} height={160} />
             </div>
 
             {/* 状态分布 */}

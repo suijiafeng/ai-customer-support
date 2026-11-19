@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { fmtTime, requestJson } from '../api.js';
 import { showToast, confirmDialog } from '../ui/feedback.js';
 import Icon from '../ui/Icon.js';
+import Select from '../ui/Select.js';
 
 type KeySource = 'custom' | 'env' | 'optional' | 'none';
 
@@ -324,9 +325,12 @@ export default function ModelsPanel() {
             </label>
             <label className="form-field">
               <span>厂商</span>
-              <select value={form.provider} onChange={(e) => changeProvider(e.target.value)}>
-                {data.providers.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
-              </select>
+              <Select
+                value={form.provider}
+                onChange={changeProvider}
+                ariaLabel="厂商"
+                options={data.providers.map((p) => ({ value: p.key, label: p.label }))}
+              />
             </label>
             <label className="form-field">
               <span>模型 ID</span>

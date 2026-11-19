@@ -1,281 +1,136 @@
+.embed-page * {
+  box-sizing: border-box;
+}
 
-    .embed-page * {
-      box-sizing: border-box;
-    }
+.embed-page {
+  background: #fafafa;
+  color: #18181b;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  min-height: 100vh;
+}
 
-    .embed-page {
-      background: #f8fafc;
-      color: #1e293b;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      margin: 0;
-      min-height: 100vh;
-    }
+.embed-page header,
+.embed-page main {
+  margin: 0 auto;
+  max-width: 880px;
+  width: calc(100% - 48px);
+}
 
-    header,
-    .embed-page main {
-      margin: 0 auto;
-      max-width: 980px;
-      width: calc(100% - 40px);
-    }
+.embed-page header {
+  align-items: center;
+  border-bottom: 1px solid #e4e4e7;
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 0;
+}
 
-    .embed-page header {
-      align-items: center;
-      border-bottom: 1px solid #e2e8f0;
-      display: flex;
-      justify-content: space-between;
-      padding: 20px 0;
-    }
+.embed-page .brand {
+  align-items: center;
+  display: flex;
+  font-size: 14px;
+  font-weight: 600;
+  gap: 10px;
+}
 
-    .embed-page .brand {
-      align-items: center;
-      display: flex;
-      font-size: 15px;
-      font-weight: 700;
-      gap: 10px;
-    }
+.embed-page .brand-mark {
+  align-items: center;
+  background: #0d9488;
+  border-radius: 6px;
+  color: #fff;
+  display: flex;
+  font-size: 11px;
+  font-weight: 600;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
 
-    .embed-page .brand-mark {
-      align-items: center;
-      background: #2563eb;
-      border-radius: 8px;
-      color: #fff;
-      display: flex;
-      font-size: 11px;
-      height: 34px;
-      justify-content: center;
-      width: 34px;
-    }
+.embed-page header a {
+  background: #0d9488;
+  border-radius: 6px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  text-decoration: none;
+  transition: background 150ms ease-out;
+}
 
-    .embed-page header a {
-      align-items: center;
-      background: #2563eb;
-      border-radius: 8px;
-      color: #fff;
-      display: inline-flex;
-      font-size: 13px;
-      font-weight: 600;
-      gap: 6px;
-      padding: 9px 16px;
-      text-decoration: none;
-      transition: background 150ms ease, transform 150ms ease;
-    }
+.embed-page header a:hover {
+  background: #0f766e;
+}
 
-    .embed-page header a:hover {
-      background: #1d4ed8;
-      transform: translateY(-1px);
-    }
+.embed-page main {
+  padding: 48px 0 96px;
+}
 
-    .embed-page main {
-      padding: 100px 0 160px;
-    }
+.embed-page h1 {
+  color: #18181b;
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: normal;
+  line-height: 1.25;
+  margin: 0;
+  max-width: 16em;
+}
 
-    .embed-page .label {
-      color: #2563eb;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.14em;
-      margin: 0 0 14px;
-    }
+.embed-page .intro {
+  color: #52525b;
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 16px 0 0;
+  max-width: 40em;
+}
 
-    .embed-page h1 {
-      color: #0f172a;
-      font-size: clamp(38px, 7vw, 62px);
-      letter-spacing: -0.05em;
-      line-height: 1.05;
-      margin: 0;
-    }
+.embed-page .steps {
+  border-top: 1px solid #e4e4e7;
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 36px 0 0;
+  padding: 0;
+}
 
-    .embed-page .intro {
-      color: #64748b;
-      font-size: 15px;
-      line-height: 1.75;
-      margin: 20px 0 0;
-      max-width: 580px;
-    }
+.embed-page .steps li {
+  border-bottom: 1px solid #e4e4e7;
+  display: grid;
+  gap: 8px 24px;
+  grid-template-columns: 180px 1fr;
+  padding: 16px 0;
+}
 
-    .embed-page .steps {
-      display: grid;
-      gap: 32px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      margin-top: 54px;
-    }
+.embed-page .steps strong {
+  color: #18181b;
+  font-size: 14px;
+  font-weight: 600;
+}
 
-    .embed-page .step {
-      text-align: center;
-    }
+.embed-page .steps span {
+  color: #52525b;
+  font-size: 14px;
+  line-height: 1.6;
+}
 
-    .embed-page .step span {
-      color: #e2e8f0;
-      display: block;
-      font-size: 48px;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      line-height: 1;
-    }
+@media (max-width: 680px) {
+  .embed-page header,
+  .embed-page main {
+    width: calc(100% - 32px);
+  }
 
-    .embed-page .step strong {
-      color: #0f172a;
-      display: block;
-      font-size: 15px;
-      margin-top: 12px;
-    }
+  .embed-page main {
+    padding-top: 32px;
+  }
 
-    .embed-page .step p {
-      color: #64748b;
-      font-size: 13px;
-      line-height: 1.6;
-      margin: 4px 0 0;
-    }
+  .embed-page h1 {
+    font-size: 24px;
+  }
 
-    .embed-page .float-guide {
-      align-items: center;
-      animation: guide-in 350ms ease-out both,
-                 guide-bob 1.8s ease-in-out 350ms infinite;
-      bottom: 128px;
-      display: flex;
-      gap: 8px;
-      pointer-events: none;
-      position: fixed;
-      right: 82px;
-      text-align: right;
-      z-index: 2147482999;
-    }
-
-    .float-guide strong,
-    .embed-page .float-guide span {
-      display: block;
-    }
-
-    .embed-page .float-guide strong {
-      color: #0f172a;
-      font-size: 12px;
-    }
-
-    .embed-page .float-guide span {
-      color: #64748b;
-      font-size: 10px;
-      margin-top: 3px;
-    }
-
-    .embed-page .float-guide b {
-      animation: arrow-nudge 1.2s ease-in-out infinite;
-      color: #2563eb;
-      font-size: 18px;
-    }
-
-    /* 浮球处的脉冲光圈：独立定位，与浮球(.fab 46px @ right/bottom 20px)同心 */
-    .embed-page .fab-ping {
-      bottom: 128px;
-      height: 46px;
-      pointer-events: none;
-      position: fixed;
-      right: 20px;
-      width: 46px;
-      z-index: 2147482998;
-    }
-
-    .fab-ping::before,
-    .embed-page .fab-ping::after {
-      animation: guide-ping 1.8s ease-out infinite;
-      border: 2px solid #2563eb;
-      border-radius: 50%;
-      content: "";
-      inset: 0;
-      position: absolute;
-    }
-
-    .embed-page .fab-ping::after {
-      animation-delay: 0.9s;
-    }
-
-    @keyframes guide-in {
-      from {
-        opacity: 0;
-        transform: translateX(10px);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
-    }
-
-    /* 整体轻微左右摆动，吸引注意 */
-    @keyframes guide-bob {
-      0%, 100% {
-        transform: translateX(0);
-      }
-      50% {
-        transform: translateX(-6px);
-      }
-    }
-
-    /* 箭头反复向浮球方向推进 */
-    @keyframes arrow-nudge {
-      0%, 100% {
-        transform: translateX(0);
-        opacity: 0.65;
-      }
-      50% {
-        transform: translateX(5px);
-        opacity: 1;
-      }
-    }
-
-    /* 浮球位置的扩散光圈 */
-    @keyframes guide-ping {
-      0% {
-        opacity: 0.55;
-        transform: scale(0.6);
-      }
-      70%, 100% {
-        opacity: 0;
-        transform: scale(1.6);
-      }
-    }
-
-    /* 尊重系统的减弱动态偏好 */
-    @media (prefers-reduced-motion: reduce) {
-      .float-guide,
-      .float-guide b,
-      .fab-ping::before,
-      .embed-page .fab-ping::after {
-        animation: none;
-      }
-
-      .embed-page .fab-ping {
-        display: none;
-      }
-    }
-
-    @media (max-width: 680px) {
-      .embed-page main {
-        padding-top: 72px;
-      }
-
-      .embed-page .steps {
-        grid-template-columns: 1fr;
-        margin-top: 38px;
-      }
-
-      .embed-page .step {
-        min-height: auto;
-      }
-
-      .embed-page .step strong {
-        margin-top: 18px;
-      }
-
-      .embed-page .float-guide {
-        bottom: 78px;
-        right: 14px;
-      }
-
-      .embed-page .float-guide b {
-        display: none;
-      }
-
-      .embed-page .fab-ping {
-        display: none;
-      }
-    }
-  
+  .embed-page .steps li {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 14px 0;
+  }
+}
