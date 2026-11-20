@@ -55,17 +55,17 @@ export default function SessionDetail({ session, onClose, canResolve = true, doc
             {session.profile?.contact && <div><dt>联系方式</dt><dd>{session.profile.contact}</dd></div>}
             {session.visitor?.code && (
               <div>
-                <dt>访客标识</dt>
+                <dt>访客编号</dt>
                 <dd className="detail-code">
                   <span className="mono">{session.visitor.code}</span>
                   <button
                     type="button"
                     className="copy-btn"
-                    aria-label="复制访客标识"
-                    title="复制访客标识"
+                    aria-label="复制访客编号"
+                    title="复制访客编号"
                     onClick={async () => {
                       const ok = await copyText(session.visitor!.code!);
-                      showToast(ok ? '访客标识已复制' : '复制失败，请手动选择', ok ? 'success' : 'error');
+                      showToast(ok ? '访客编号已复制' : '复制失败，请手动选择', ok ? 'success' : 'error');
                     }}
                   >
                     <Icon name="copy" size={14} />

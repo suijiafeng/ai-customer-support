@@ -12,7 +12,7 @@ test('访客自己留的名字原样显示', () => {
   assert.equal(visitorDisplayName('张三'), '张三');
 });
 
-test('非 v- 开头的长标识首尾保留、中间省略', () => {
+test('非 v- 开头的长编号首尾保留、中间省略', () => {
   assert.equal(shortVisitorCode('custom-visitor-identifier-123'), 'custom…-123');
   assert.equal(shortVisitorCode('short'), 'short');
 });

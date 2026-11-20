@@ -108,7 +108,7 @@ export default function ChatPanel({ session, agent }: ChatPanelProps) {
 
   const pill = STATUS_PILL[session.status] || STATUS_PILL.bot;
   const host = pageHost(session.visitor?.pageUrl);
-  // 与会话列表一致：自动生成的「访客 v-…」统一显示短码，完整标识在 title 和详情栏里
+  // 与会话列表一致：自动生成的「访客 v-…」统一显示短码，访客编号原文在 title 和详情栏里
   const shortName = visitorDisplayName(session.displayName);
 
   return (

@@ -1261,7 +1261,7 @@ button.switch:disabled { opacity: .5; cursor: not-allowed; }
 .af-select-menu button.active { background: #e6f7f5; color: #0f766e; }
 .af-select-menu button:disabled { color: #a1a1aa; cursor: not-allowed; }
 
-/* 详情栏：访客标识 + 复制按钮 */
+/* 详情栏：访客编号 + 复制按钮 */
 .detail-code { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .detail-code .mono { overflow-wrap: anywhere; }
 .copy-btn {
