@@ -86,6 +86,7 @@ node scripts/dialog-test.js
 
 - FAQ 是关键词和 bigram，不是语义检索。
 - 热数据集在内存里。多实例不会互相广播 SSE。
+- 同一会话的消息按顺序串行处理（`common/keyed-lock.ts`），锁只在单个进程内有效，多实例需要换成 Redis 之类的分布式锁。
 - 每日趋势大约 30 分钟写一次。`DB_DRIVER=memory` 时重启即清空。
 - 访客挂件的图片发送是关的。工作台仍可发送 data URL 图片，每张不超过 2MB，最多 4 张。
 - `docs/ARCHITECTURE.md` 写的是更早的 Socket.IO / Prisma 方案，文件开头已标明过时。`docs/FEATURE-IDEAS.md` 不是已排期的功能。

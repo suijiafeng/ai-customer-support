@@ -50,16 +50,24 @@ export class ChatController {
   async chatHandler(@Body() body: any, @Req() req: Request) {
     this.assertHasContent(body);
     this.assertValidSiteKey(body, req);
-    await this.assertMayWriteSession(body, req);
-    try {
-      return this.withVisitorToken(await this.chat.handleChat(body, undefined, this.clientMeta(req)));
-    } catch (error: any) {
-      this.logger.error(`[POST /api/chat] 处理失败: ${error?.stack || error}`);
-      throw new InternalServerErrorException({
-        error: 'chat workflow failed',
-        detail: process.env.NODE_ENV === 'production' ? undefined : String(error?.message || error),
-      });
-    }
+    // 同一会话串行处理；令牌校验也放进锁里，避免「第一条还在生成、会话看起来还没历史」
+    // 的窗口期里，不带令牌的第二条请求混进来（A6）
+    return this.chat.runExclusive(this.sessionIdOf(body), async () => {
+      await this.assertMayWriteSession(body, req);
+      try {
+        return this.withVisitorToken(await this.chat.handleChat(body, undefined, this.clientMeta(req)));
+      } catch (error: any) {
+        this.logger.error(`[POST /api/chat] 处理失败: ${error?.stack || error}`);
+        throw new InternalServerErrorException({
+          error: 'chat workflow failed',
+          detail: process.env.NODE_ENV === 'production' ? undefined : String(error?.message || error),
+        });
+      }
+    });
+  }
+
+  private sessionIdOf(body: any): string {
+    return String(body?.sessionId || 'default');
   }
 
   @UseGuards(ThrottlerGuard)
@@ -77,12 +85,13 @@ export class ChatController {
     if (!this.auth.verifyVisitorToken(token, sessionId)) {
       throw new ForbiddenException({ error: 'visitor_token_required' });
     }
-    return this.withVisitorToken(await this.chat.decideAgentAction({
+    // 串行：同一条待确认操作连点两次「确认」时，第二次会看到已处理，不会执行两遍
+    return this.chat.runExclusive(sessionId, async () => this.withVisitorToken(await this.chat.decideAgentAction({
       sessionId,
       actionId,
       decision,
       siteKey: body?.siteKey,
-    }));
+    })));
   }
 
   @UseGuards(ThrottlerGuard)
@@ -91,6 +100,11 @@ export class ChatController {
   async chatStream(@Body() body: any, @Res() res: Response, @Req() req: Request) {
     this.assertHasContent(body);
     this.assertValidSiteKey(body, req);
+    return this.chat.runExclusive(this.sessionIdOf(body), () => this.streamLocked(body, res, req));
+  }
+
+  private async streamLocked(body: any, res: Response, req: Request) {
+    // 在锁里校验：校验失败时还没写响应头，异常照常变成 JSON 错误响应
     await this.assertMayWriteSession(body, req);
 
     res.writeHead(200, {

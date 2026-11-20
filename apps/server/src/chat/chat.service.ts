@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { LIMITS } from '@assistflow/shared';
-import type { ChatResponse, VisitorInfo, Workflow } from '@assistflow/shared';
+import type { ChatResponse, Message, VisitorInfo, Workflow } from '@assistflow/shared';
+import { KeyedLock } from '../common/keyed-lock.js';
 import { AiService, type ReplyDeltaHandler } from '../ai/ai.service.js';
 import { KnowledgeService } from '../knowledge/knowledge.service.js';
 import { detectIntent, detectSentiment, shouldHandoff } from '../rules/rules.js';
@@ -50,6 +51,21 @@ export class ChatService {
       };
     }
     return null;
+  }
+
+  /** 按会话串行：同一会话的消息一条处理完再处理下一条，不同会话互不影响 */
+  private readonly sessionLocks = new KeyedLock();
+
+  runExclusive<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
+    return this.sessionLocks.run(sessionId || 'default', work);
+  }
+
+  /** 在会话「当前」历史后追加，而不是在某个旧快照后追加 */
+  private appendNow(sessionId: string, ...messages: Message[]): Message[] {
+    return this.sessions.setConversation(
+      sessionId,
+      this.sessions.appendMessages(this.sessions.getMessages(sessionId), ...messages)
+    );
   }
 
   /** 该会话是否已有对话记录（内存没有时回源到库，内存淘汰不等于会话不存在） */
@@ -223,6 +239,17 @@ export class ChatService {
     // 2. 其余消息先给 Agent：只有它真的调用了工具才算接手；模型只回了文字、或第一步就失败，
     //    都交回下面的普通流程（FAQ 检索 + 人设 + 流式输出 + 转人工规则）。
     const explicitHandoff = detectIntent(message) === 'human_handoff';
+
+    // 访客消息先落库，再去请求模型：
+    // - 工作台立刻能看到这条消息；
+    // - 回复生成期间会话已经「有历史」，同一会话的新请求必须出示访客令牌（A6）；
+    // - 回复写回时按最新历史追加（appendNow），不会用请求开始时的快照覆盖掉
+    //   期间新增的消息（A5：并发消息 / 客服插话丢失）。
+    this.appendNow(
+      sessionId,
+      this.sessions.createMessage({ role: 'user', actor: 'customer', content: message, attachments, clientMessageId })
+    );
+
     if (message && !explicitHandoff) {
       const agentTurn = await this.agent.handleUtterance({ message, sessionId, tenantKey, modelId: tenantModelId, history, signal });
       if (agentTurn?.handled) {
@@ -233,11 +260,7 @@ export class ChatService {
           agentAction: agentTurn.action,
           agentTrace: agentTurn.traces,
         });
-        const nextHistory = this.sessions.appendMessages(
-          storedHistory,
-          this.sessions.createMessage({ role: 'user', actor: 'customer', content: message, attachments, clientMessageId }),
-          assistant,
-        );
+        const nextHistory = this.appendNow(sessionId, assistant);
         const ticket = agentTurn.handoff ? this.tickets.getLatestForSession(sessionId) : null;
         const workflow: Workflow = {
           ai: { provider: this.ai.provider, model: this.ai.getActiveModel(), used: false, fallback: agentTurn.degraded, error: null },
@@ -249,7 +272,6 @@ export class ChatService {
           ticket,
           sources: [],
         };
-        this.sessions.setConversation(sessionId, nextHistory);
         this.sessions.upsertSession({
           sessionId, message, workflow, profile, visitor, tenantKey,
           ...(agentTurn.handoff ? { forceStatus: 'waiting_human' as const } : {}),
@@ -291,9 +313,8 @@ export class ChatService {
       signal
     );
     const reply = replyResult.text;
-    const nextHistory = this.sessions.appendMessages(
-      storedHistory,
-      this.sessions.createMessage({ role: 'user', actor: 'customer', content: message, attachments, clientMessageId }),
+    const nextHistory = this.appendNow(
+      sessionId,
       this.sessions.createMessage({ role: 'assistant', actor: 'ai', content: reply })
     );
     const workflow: Workflow = {
@@ -310,7 +331,6 @@ export class ChatService {
         score: Number(faq.score.toFixed(2)),
       })),
     };
-    this.sessions.setConversation(sessionId, nextHistory);
     this.sessions.upsertSession({ sessionId, message, workflow, profile, visitor, tenantKey });
     this.sessionTicket.notify(sessionId);
     return {
