@@ -4,6 +4,7 @@ import { fmtTime, intentText, requestJson, type AgentIdentity } from '../api.js'
 import { showToast } from '../ui/feedback.js';
 import Icon from '../ui/Icon.js';
 import EmptyState from '../ui/EmptyState.js';
+import RowMenu, { type RowMenuItem } from '../ui/RowMenu.js';
 
 const STATUS_TEXT: Record<string, string> = { open: '待处理', processing: '处理中', resolved: '已解决' };
 // 与会话头部、接待大厅同一色板（styles.css 的 --st-*）：待处理=需要处理、处理中=进行中、已解决=结束（灰）
@@ -129,7 +130,7 @@ export default function TicketsPanel({ agent, onOpenSession }: TicketsPanelProps
         )
       ) : (
         <div className={`ticket-table-wrap${loading ? ' stale' : ''}`}>
-          <table className="ticket-table">
+          <table className="ticket-table ticket-table--tickets">
             <thead>
               <tr>
                 <th>编号</th><th>状态</th><th>优先级</th><th>事由</th>
@@ -158,15 +159,14 @@ export default function TicketsPanel({ agent, onOpenSession }: TicketsPanelProps
                   {isAdmin && <td>{t.ownerAgentName || <span className="muted">未认领</span>}</td>}
                   <td>{t.notes?.length ? <span className="note-count"><Icon name="message-circle" size={12} style={{ marginRight: 3, verticalAlign: 'text-bottom' }} />{t.notes.length}</span> : <span className="muted">—</span>}</td>
                   <td className="mono">{fmtDate(t.updatedAt)}</td>
-                  <td className="ops">
-                    <button className="ghost-btn" onClick={() => setDetailId(t.id)}>详情</button>
-                    {canOperate(t) && t.status === 'open' && (
-                      <button className="ghost-btn" onClick={() => patch(t, { status: 'processing' })}>开始处理</button>
-                    )}
-                    {canOperate(t) && t.status !== 'resolved' && (
-                      <button className="ghost-btn" onClick={() => patch(t, { status: 'resolved' })}>标记解决</button>
-                    )}
-                    <button className="ghost-btn" onClick={() => onOpenSession(t.sessionId)}>打开会话</button>
+                  <td className="ops-cell">
+                    <RowActions
+                      ticket={t}
+                      canOperate={canOperate(t)}
+                      onDetail={() => setDetailId(t.id)}
+                      onPatch={(body) => patch(t, body)}
+                      onOpenSession={() => onOpenSession(t.sessionId)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -185,6 +185,33 @@ export default function TicketsPanel({ agent, onOpenSession }: TicketsPanelProps
         />
       )}
     </section>
+  );
+}
+
+/**
+ * 每行只露一个主操作（按状态推进到下一步），其余收进「更多」：
+ * 待处理 → 开始处理；处理中 → 标记解决；已解决或非本人 → 打开会话。
+ */
+function RowActions({
+  ticket, canOperate, onDetail, onPatch, onOpenSession,
+}: {
+  ticket: Ticket;
+  canOperate: boolean;
+  onDetail: () => void;
+  onPatch: (body: { status: string }) => void;
+  onOpenSession: () => void;
+}) {
+  const all: Array<RowMenuItem & { key: string }> = [];
+  if (canOperate && ticket.status === 'open') all.push({ key: 'start', label: '开始处理', onSelect: () => onPatch({ status: 'processing' }) });
+  if (canOperate && ticket.status !== 'resolved') all.push({ key: 'resolve', label: '标记解决', onSelect: () => onPatch({ status: 'resolved' }) });
+  all.push({ key: 'open', label: '打开会话', onSelect: onOpenSession });
+  all.push({ key: 'detail', label: '详情', onSelect: onDetail });
+  const [primary, ...rest] = all;
+  return (
+    <div className="row-actions">
+      <button type="button" className="ghost-btn row-primary" onClick={primary.onSelect}>{primary.label}</button>
+      <RowMenu items={rest} label={`${ticket.id} 的更多操作`} />
+    </div>
   );
 }
 

@@ -1311,3 +1311,20 @@ button.switch:disabled { opacity: .5; cursor: not-allowed; }
   font: inherit; font-size: 14px; color: #0f172a; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
 .lost-actions { display: flex; justify-content: center; gap: 8px; }
 .lost-actions .retry-btn { padding: 6px 14px; font-size: 14px; }
+
+/* 跟进事项：每行一个主操作 + 「更多」下拉，操作列不再挤 4 个按钮 */
+.ticket-table--tickets th:last-child,
+.ticket-table--tickets td:last-child { width: 176px; min-width: 176px; }
+.row-actions { display: flex; align-items: center; gap: 2px; }
+.ticket-table-wrap td .ghost-btn.row-primary { color: var(--st-active-fg); font-weight: 600; }
+.ticket-table-wrap td .ghost-btn.row-menu-btn { color: var(--ink-3); }
+.ticket-table-wrap td .ghost-btn.row-menu-btn[aria-expanded="true"] { background: var(--st-neutral-bg); color: var(--ink); }
+.row-menu-caret { font-size: 10px; margin-left: 2px; }
+.row-menu { position: fixed; z-index: 300; min-width: 132px; padding: 4px; background: #fff; border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 10px 24px rgba(0,0,0,.1); display: flex; flex-direction: column;
+  animation: afw-fade .12s ease-out; }
+.row-menu [role="menuitem"] { text-align: left; background: transparent; border: 0; border-radius: 6px; padding: 8px 10px;
+  font-size: 14px; color: var(--ink-2); cursor: pointer; }
+.row-menu [role="menuitem"]:hover, .row-menu [role="menuitem"]:focus-visible { background: var(--st-active-bg); color: var(--st-active-fg); outline: none; }
+.row-menu [role="menuitem"]:disabled { opacity: .4; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .row-menu { animation: none; } }
