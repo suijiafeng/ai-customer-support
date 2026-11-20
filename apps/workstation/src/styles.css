@@ -1271,3 +1271,11 @@ button.switch:disabled { opacity: .5; cursor: not-allowed; }
 }
 .copy-btn:hover { background: #f1f5f9; color: #0f172a; }
 .copy-btn:focus-visible { outline: 2px solid #3b82f6; outline-offset: 1px; }
+
+/* 图表块加载失败：只在卡片内提示，可重试 */
+.chart-error { width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; border-radius: 8px; background: #f8fafc; color: #64748b; font-size: 14px; text-align: center; }
+.chart-error p { margin: 0; }
+.chart-error-hint { font-size: 12px; color: #94a3b8; }
+.chart-error-actions { display: flex; gap: 8px; margin-top: 4px; }
+.chart-error .retry-btn { padding: 4px 14px; font-size: 13px; }
