@@ -3,7 +3,7 @@ import type * as echarts from 'echarts';
 import type { Tenant, TenantStats } from '@assistflow/shared';
 import { fmtTime, requestJson } from '../api.js';
 import { showToast, confirmDialog } from '../ui/feedback.js';
-import EChart from '../ui/EChart.js';
+import EChart from '../ui/LazyEChart.js';
 import Icon from '../ui/Icon.js';
 import EmptyState from '../ui/EmptyState.js';
 import Select from '../ui/Select.js';

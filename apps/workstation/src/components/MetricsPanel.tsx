@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DailyMetricPoint, Metrics } from '@assistflow/shared';
 import type * as echarts from 'echarts';
 import { fmtTime, requestJson } from '../api.js';
-import EChart from '../ui/EChart.js';
+import EChart from '../ui/LazyEChart.js';
 import Icon from '../ui/Icon.js';
 
 const MAX_DAYS = 14;
