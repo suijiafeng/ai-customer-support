@@ -57,7 +57,11 @@ export function useChatSession({
   const [atBottom, setAtBottom] = useState(true);
   const [keyInvalid, setKeyInvalid] = useState(false); // widget 接入密钥无效/停用：重试无意义，需和普通失败区分
   // 会话是否处于人工接管态：接管期间 AI 让位，需要在界面上说明并给「切回 AI」的出口
-  const [humanAssigned, setHumanAssigned] = useState(false);
+  // 会话接待状态（来自服务端 session.status）：bot / waiting_human / assigned / …
+  const [sessionStatus, setSessionStatus] = useState<string | null>(null);
+  const humanAssigned = sessionStatus === 'assigned';
+  // 已转人工、还没有客服认领：给访客一个「排队中」的明确反馈，客服认领（或回复）后切成接待中
+  const waitingHuman = sessionStatus === 'waiting_human';
 
   const [sessionId, setSessionId] = useState(() => loadVisitorId(siteKey) ?? '');
   const listEl = useRef<HTMLDivElement | null>(null);
@@ -142,7 +146,7 @@ export function useChatSession({
         headers: visitorAuthHeaders(sessionId),
       });
       setMessages(data.messages);
-      setHumanAssigned(data.session?.status === 'assigned');
+      setSessionStatus(data.session?.status ?? null);
     } catch {}
 
     const es = new EventSource(
@@ -156,7 +160,7 @@ export function useChatSession({
         const payload = JSON.parse((event as MessageEvent).data);
         setMessages(payload.messages || []);
         // 客服接管/交还都会推 session 事件，据此实时切换界面上的人工接管提示
-        if (payload.session) setHumanAssigned(payload.session.status === 'assigned');
+        if (payload.session) setSessionStatus(payload.session.status ?? null);
       } catch {}
     });
     es.onerror = () => setConnection('syncing');
@@ -283,7 +287,7 @@ export function useChatSession({
         // 令牌刚落盘，这时才连得上会话 SSE，客服之后的回复才能推到挂件里
         await activate();
         setMessages(data.messages || [], true);
-        if (data?.session) setHumanAssigned(data.session.status === 'assigned');
+        if (data?.session) setSessionStatus(data.session.status ?? null);
       } catch (err: any) {
         const inflight = inflightRef.current;
         if (err?.code === TOKEN_REQUIRED && !options?.rotated) {
@@ -392,14 +396,14 @@ export function useChatSession({
     saveVisitorToken(sid, data?.visitorToken);
     await activate();
     setMessages(data.messages || [], true);
-    if (data?.session?.status === 'assigned') setHumanAssigned(true);
-    if (data?.session?.status && data.session.status !== 'assigned') setHumanAssigned(false);
+    if (data?.session?.status) setSessionStatus(data.session.status);
   }, [requestJson, setMessages, siteKey, tenantId, activate]);
 
   return {
     connection,
     messages,
     humanAssigned,
+    waitingHuman,
     switchToAi,
     sending,
     atBottom,

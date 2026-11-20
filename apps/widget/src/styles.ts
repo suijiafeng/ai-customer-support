@@ -109,6 +109,10 @@ export default `
 .handoff-bar button { border: 1px solid var(--afw-brand); background: #fff; color: var(--afw-brand); border-radius: 8px;
   padding: 3px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .handoff-bar button:disabled { opacity: .5; cursor: not-allowed; }
+.handoff-bar.queue { justify-content: flex-start; background: #fff7ed; color: #9a3412; }
+.queue-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #f97316;
+  animation: afw-blink 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .queue-dot { animation: none; } }
 .composer { margin: 8px 12px 12px; border: 1px solid transparent; border-radius: 12px;
   background: #f1f3f5; transition: border-color .2s, box-shadow .2s, background .2s; }
 .composer:focus-within { background: #fff; border-color: var(--afw-brand); box-shadow: 0 0 0 3px rgba(var(--afw-brand-rgb),.12); }

@@ -156,6 +156,7 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
     retrySend,
     decideAction,
     humanAssigned,
+    waitingHuman,
     switchToAi,
   } = useChatSession({
     apiBase,
@@ -460,6 +461,13 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
               </div>
             )}
             {/* 人工接管期间 AI 让位：说明当前谁在接待，并给一个不必干等的出口 */}
+            {/* 已转人工但还没人认领：告诉访客在排队，以及排队期间 AI 仍会先回答 */}
+            {waitingHuman && !keyInvalid && (
+              <div className="handoff-bar queue" role="status" aria-live="polite">
+                <span className="queue-dot" aria-hidden="true" />
+                <span>已为你转接人工客服，正在排队等待接入；接入前 AI 会继续为你解答</span>
+              </div>
+            )}
             {humanAssigned && !keyInvalid && (
               <div className="handoff-bar" role="status">
                 <span>人工客服接待中，AI 已暂停自动回复</span>
