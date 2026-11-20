@@ -135,6 +135,23 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
     return () => root.removeEventListener('mousedown', onDown as EventListener);
   }, [showEmoji, showQuick, closeEmoji]);
 
+  // Esc：先收起表情/快捷提问弹层，再按一次关闭整个窗口，焦点还给悬浮球
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.isComposing || e.defaultPrevented) return;
+      if (showEmoji || showQuick) {
+        closeEmoji();
+        setShowQuick(false);
+        return;
+      }
+      setOpen(false);
+      fabRef.current?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, showEmoji, showQuick, closeEmoji, fabRef]);
+
   const clearPending = useCallback(() => setPending([]), []);
   const onSendStart = useCallback(() => {
     closeEmoji();
