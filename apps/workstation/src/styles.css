@@ -1288,3 +1288,12 @@ button.switch:disabled { opacity: .5; cursor: not-allowed; }
 .chart-spinner { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #cbd5e1; border-top-color: #0d9488;
   animation: spin .8s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .chart-loading, .chart-spinner { animation: none; } }
+
+/* 会话被其他客服抢先接待：说明 + 草稿 */
+.lost-session { margin: auto; max-width: 520px; padding: 24px; display: flex; flex-direction: column; gap: 10px; text-align: center; color: #475569; }
+.lost-title { margin: 0; font-size: 16px; font-weight: 600; color: #0f172a; }
+.lost-hint { margin: 0; font-size: 14px; }
+.lost-draft { margin: 4px 0 0; padding: 12px 14px; max-height: 240px; overflow: auto; text-align: left; white-space: pre-wrap; word-break: break-word;
+  font: inherit; font-size: 14px; color: #0f172a; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+.lost-actions { display: flex; justify-content: center; gap: 8px; }
+.lost-actions .retry-btn { padding: 6px 14px; font-size: 14px; }

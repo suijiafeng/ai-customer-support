@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { clearAuth, getStoredAgent, getToken, type AgentIdentity } from './api.js';
 import { useQueueEvents } from './hooks/useQueueEvents.js';
 import { useHistoryBack } from './hooks/useHistoryBack.js';
@@ -13,7 +13,7 @@ import ModelsPanel from './components/ModelsPanel.js';
 import UsersPanel from './components/UsersPanel.js';
 import FaqsPanel from './components/FaqsPanel.js';
 import { FeedbackHost } from './ui/feedback.js';
-import { countAwaitingHuman } from '@assistflow/shared';
+import { countAwaitingHuman, type SessionSummary } from '@assistflow/shared';
 import Icon from './ui/Icon.js';
 
 export default function App() {
@@ -75,6 +75,12 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
     () => sessions.find((s) => s.sessionId === activeId) || null,
     [sessions, activeId],
   );
+  // 正在看的会话从列表里消失（被其他客服抢先接待，非管理员看不到别人的会话）：
+  // 记住最后一次的快照，聊天区说明原因并保留草稿，而不是直接变成「还没有选中会话」
+  const lastActiveRef = useRef<SessionSummary | null>(null);
+  if (activeSession) lastActiveRef.current = activeSession;
+  const lostSession =
+    !activeSession && activeId && lastActiveRef.current?.sessionId === activeId ? lastActiveRef.current : null;
 
   // 选中会话后在移动端自动收起队列
   const handleSelect = useCallback((id: string) => {
@@ -216,7 +222,14 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
             aria-hidden="true"
           />
         )}
-        {view === 'sessions' && <ChatPanel session={activeSession} agent={agent} />}
+        {view === 'sessions' && (
+          <ChatPanel
+            session={activeSession}
+            lostSession={lostSession}
+            onDismissLost={() => setActiveId(null)}
+            agent={agent}
+          />
+        )}
         {view === 'system' && (
           <div className="admin-layout">
             {systemSubView === 'ops' && (

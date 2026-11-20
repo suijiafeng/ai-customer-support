@@ -8,6 +8,9 @@ import Icon from '../ui/Icon.js';
 import EmptyState from '../ui/EmptyState.js';
 import { useSessionMessages, type ConnectionStatus } from '../hooks/useSessionMessages.js';
 import { requestJson, type AgentIdentity } from '../api.js';
+import { clearDraft, loadDraft } from '../ui/drafts.js';
+import { copyText } from '../ui/clipboard.js';
+import { showToast } from '../ui/feedback.js';
 
 const CONNECTION_LABEL: Record<ConnectionStatus, string> = {
   synced: '消息已同步',
@@ -67,10 +70,49 @@ function pageHost(url?: string | null): string {
 
 interface ChatPanelProps {
   session: SessionSummary | null;
+  /** 刚才还在看、现在被其他客服接走的会话（列表里已经没有了） */
+  lostSession?: SessionSummary | null;
+  onDismissLost?: () => void;
   agent: AgentIdentity;
 }
 
-export default function ChatPanel({ session, agent }: ChatPanelProps) {
+/** 会话被别人抢先接待：说明情况，并把没发出去的草稿留给客服复制 */
+function LostSessionNotice({ session, agent, onDismiss }: { session: SessionSummary; agent: AgentIdentity; onDismiss?: () => void }) {
+  const [draft] = useState(() => loadDraft(agent.id, session.sessionId));
+  const name = visitorDisplayName(session.displayName);
+  const dismiss = () => {
+    clearDraft(agent.id, session.sessionId);
+    onDismiss?.();
+  };
+  return (
+    <main className="chat">
+      <div className="lost-session" role="status">
+        <p className="lost-title">{name} 已不在你的会话列表里</p>
+        <p className="lost-hint">
+          通常是被其他客服抢先接待了。{draft ? '没发出去的回复保留在下面，可以复制后另作处理。' : ''}
+        </p>
+        {draft && <pre className="lost-draft">{draft}</pre>}
+        <div className="lost-actions">
+          {draft && (
+            <button
+              type="button"
+              className="retry-btn"
+              onClick={async () => {
+                const ok = await copyText(draft);
+                showToast(ok ? '草稿已复制' : '复制失败，请手动选择', ok ? 'success' : 'error');
+              }}
+            >
+              复制草稿
+            </button>
+          )}
+          <button type="button" className="retry-btn" onClick={dismiss}>{draft ? '丢弃并关闭' : '关闭'}</button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+export default function ChatPanel({ session, lostSession, onDismissLost, agent }: ChatPanelProps) {
   const sessionId = session?.sessionId || null;
   const { messages, applyServer, status, connection, reload } = useSessionMessages(sessionId);
   const docked = useDockedDetail();
@@ -90,6 +132,10 @@ export default function ChatPanel({ session, agent }: ChatPanelProps) {
     () => Boolean(session && (agent.role === 'admin' || session.assignedAgentId === agent.id)),
     [session, agent.role, agent.id],
   );
+
+  if (!session && lostSession) {
+    return <LostSessionNotice key={lostSession.sessionId} session={lostSession} agent={agent} onDismiss={onDismissLost} />;
+  }
 
   if (!session) {
     return (
