@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { SessionSummary } from '@assistflow/shared';
-import { API, SSE_BASE, fetchSseTicket, requestJson } from '../api.js';
+import { SSE_BASE, fetchSseTicket, requestAuthRecheck, requestJson } from '../api.js';
 
 // 会话队列实时订阅：优先 SSE（用 60s 短票据鉴权），断线/票据过期时降级轮询并自动重连。
 export function useQueueEvents() {
@@ -50,6 +50,15 @@ export function useQueueEvents() {
         es.onopen = () => { setConnected(true); stopPolling(); };
         es.addEventListener('sessions', (e) => {
           try { setSessions(JSON.parse((e as MessageEvent).data).sessions || []); setReady(true); } catch {}
+        });
+        // 角色被管理员修改：服务端随后会按新权限补推快照，这里同步菜单
+        es.addEventListener('role', () => requestAuthRecheck());
+        // 账号失效（停用 / 删除 / 改密码）：服务端发完 revoked 就断开。核对身份，401 时回登录页
+        es.addEventListener('revoked', () => {
+          es?.close();
+          es = null;
+          setConnected(false);
+          requestAuthRecheck();
         });
         es.onerror = () => {
           setConnected(false);

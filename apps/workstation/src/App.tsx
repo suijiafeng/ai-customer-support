@@ -1,5 +1,14 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { clearAuth, getStoredAgent, getToken, type AgentIdentity } from './api.js';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AUTH_RECHECK_EVENT,
+  clearAuth,
+  fetchMe,
+  getStoredAgent,
+  getToken,
+  updateStoredAgent,
+  type AgentIdentity,
+} from './api.js';
+import { showToast } from './ui/feedback.js';
 import { useQueueEvents } from './hooks/useQueueEvents.js';
 import { useHistoryBack } from './hooks/useHistoryBack.js';
 import { useResizableWidth } from './hooks/useResizableWidth.js';
@@ -13,6 +22,7 @@ import ModelsPanel from './components/ModelsPanel.js';
 import UsersPanel from './components/UsersPanel.js';
 import FaqsPanel from './components/FaqsPanel.js';
 import { FeedbackHost } from './ui/feedback.js';
+import { countAwaitingHuman, type SessionSummary } from '@assistflow/shared';
 import Icon from './ui/Icon.js';
 
 export default function App() {
@@ -20,6 +30,8 @@ export default function App() {
   const [agent, setAgent] = useState<AgentIdentity | null>(() =>
     getToken() ? getStoredAgent() : null
   );
+
+  useAuthSync(agent, setAgent);
 
   return (
     <>
@@ -29,6 +41,58 @@ export default function App() {
       <FeedbackHost />
     </>
   );
+}
+
+/**
+ * 身份以服务端为准：加载时、窗口重新聚焦时、遇到 403、SSE 推来 role / revoked 时，
+ * 调 GET /api/auth/me 核对一次。角色变了就更新菜单（降级后管理菜单立刻消失）；
+ * 令牌已失效（停用 / 删除 / 改密码）时 requestJson 收到 401 会清空登录态回到登录页。
+ */
+function useAuthSync(agent: AgentIdentity | null, setAgent: (a: AgentIdentity) => void) {
+  const agentRef = useRef(agent);
+  agentRef.current = agent;
+  useEffect(() => {
+    if (!agent) return;
+    let inflight = false;
+    let lastAt = 0;
+    const sync = async (force = false) => {
+      const now = Date.now();
+      if (inflight || (!force && now - lastAt < 2000)) return;
+      inflight = true;
+      lastAt = now;
+      try {
+        const me = await fetchMe();
+        const current = agentRef.current;
+        if (!current) return;
+        if (me.role !== current.role || me.name !== current.name) {
+          const next = { ...current, name: me.name, role: me.role };
+          updateStoredAgent(next);
+          setAgent(next);
+          if (me.role !== current.role) {
+            showToast(me.role === 'admin' ? '你的账号已升级为管理员' : '你的账号已调整为普通客服，管理功能已隐藏', 'info', 5000);
+          }
+        }
+      } catch {
+        /* 网络失败保留现状；401 已由 requestJson 处理 */
+      } finally {
+        inflight = false;
+      }
+    };
+    const onFocus = () => sync();
+    const onVisible = () => { if (document.visibilityState === 'visible') sync(); };
+    const onRecheck = () => sync(true);
+    sync(true);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener(AUTH_RECHECK_EVENT, onRecheck);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener(AUTH_RECHECK_EVENT, onRecheck);
+    };
+    // 只在登录 / 登出时重新挂载监听；角色变化通过 agentRef 读取
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Boolean(agent)]);
 }
 
 type View = 'sessions' | 'system';
@@ -69,11 +133,21 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
     () => SYSTEM_SUB_VIEWS.filter((sv) => !sv.adminOnly || agent.role === 'admin'),
     [agent.role],
   );
+  // 降级后正停在管理页：退回人人可见的数据概览
+  useEffect(() => {
+    if (!systemSubViews.some((sv) => sv.key === systemSubView)) setSystemSubView('ops');
+  }, [systemSubViews, systemSubView]);
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.sessionId === activeId) || null,
     [sessions, activeId],
   );
+  // 正在看的会话从列表里消失（被其他客服抢先接待，非管理员看不到别人的会话）：
+  // 记住最后一次的快照，聊天区说明原因并保留草稿，而不是直接变成「还没有选中会话」
+  const lastActiveRef = useRef<SessionSummary | null>(null);
+  if (activeSession) lastActiveRef.current = activeSession;
+  const lostSession =
+    !activeSession && activeId && lastActiveRef.current?.sessionId === activeId ? lastActiveRef.current : null;
 
   // 选中会话后在移动端自动收起队列
   const handleSelect = useCallback((id: string) => {
@@ -81,10 +155,8 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
     closeQueue();
   }, []);
 
-  const poolCount = useMemo(
-    () => sessions.filter((s) => !s.assignedAgentId && s.status !== 'closed').length,
-    [sessions],
-  );
+  // 与接待大厅同一判定（@assistflow/shared 的 isAwaitingHuman）：只数已转人工、还没人认领的会话
+  const poolCount = useMemo(() => countAwaitingHuman(sessions), [sessions]);
   // 移动端侧栏即抽屉：会话接待时展示队列，数据管理时展示子菜单
   const sideOpen = view === 'sessions' ? queueOpen : systemMenuOpen;
   // 桌面端侧栏宽度：最小 300px，默认占窗口 20%（随窗口缩放），可拖拽调整到最宽 40%，拖过后按浏览器记住
@@ -217,7 +289,14 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
             aria-hidden="true"
           />
         )}
-        {view === 'sessions' && <ChatPanel session={activeSession} agent={agent} />}
+        {view === 'sessions' && (
+          <ChatPanel
+            session={activeSession}
+            lostSession={lostSession}
+            onDismissLost={() => setActiveId(null)}
+            agent={agent}
+          />
+        )}
         {view === 'system' && (
           <div className="admin-layout">
             {systemSubView === 'ops' && (

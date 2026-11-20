@@ -11,10 +11,19 @@ export interface AgentClaims {
   name: string;
   role: AgentRole;
   exp: number;
+  /** 账号的令牌版本：改密码时加 1，旧令牌随即失效。缺省视为 0（兼容旧 token）。 */
+  tv?: number;
+}
+
+export interface TokenPayload {
+  sub: string;
+  name: string;
+  role: AgentRole;
+  tv?: number;
 }
 
 export function signToken(
-  payload: { sub: string; name: string; role: AgentRole },
+  payload: TokenPayload,
   secret: string,
   ttlSeconds = 12 * 3600
 ): string {
@@ -28,7 +37,7 @@ export function signToken(
 
 // SSE 用 ?ticket= 传递凭证（EventSource 无法自定义请求头），60s 短 TTL 避免长效 JWT 进 URL
 export function signSseTicket(
-  payload: { sub: string; name: string; role: AgentRole },
+  payload: TokenPayload,
   secret: string,
   ttlSeconds = 60
 ): string {

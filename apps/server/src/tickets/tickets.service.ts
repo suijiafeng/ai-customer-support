@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { LIMITS, TICKET_TRANSITIONS } from '@assistflow/shared';
+import { LIMITS, TICKET_TRANSITIONS, isUrgentText } from '@assistflow/shared';
 import type { Inquiry, Ticket } from '@assistflow/shared';
-import { extractInquiryId, hasAny, normalize } from '../rules/rules.js';
+import { extractInquiryId } from '../rules/rules.js';
 import { StoreService } from '../store/store.service.js';
 
 @Injectable()
@@ -91,7 +91,8 @@ export class TicketsService implements OnModuleInit {
       return existingTicket;
     }
 
-    const priority = hasAny(normalize(message), ['紧急', '尽快', '马上', '今天联系']) ? 'high' : 'normal';
+    // 与工作台接待大厅的「急」共用同一份词表（@assistflow/shared 的 URGENT_KEYWORDS）
+    const priority = isUrgentText(message) ? 'high' : 'normal';
     const ticket: Ticket = {
       id: `T-${randomUUID().slice(0, 8).toUpperCase()}`,
       sessionId,

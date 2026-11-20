@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { LIMITS } from '@assistflow/shared';
-import type { ChatResponse, VisitorInfo, Workflow } from '@assistflow/shared';
+import type { ChatResponse, Message, VisitorInfo, Workflow } from '@assistflow/shared';
+import { KeyedLock } from '../common/keyed-lock.js';
 import { AiService, type ReplyDeltaHandler } from '../ai/ai.service.js';
 import { KnowledgeService } from '../knowledge/knowledge.service.js';
 import { detectIntent, detectSentiment, shouldHandoff } from '../rules/rules.js';
@@ -52,7 +53,26 @@ export class ChatService {
     return null;
   }
 
+  /** 按会话串行：同一会话的消息一条处理完再处理下一条，不同会话互不影响 */
+  private readonly sessionLocks = new KeyedLock();
+
+  runExclusive<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
+    return this.sessionLocks.run(sessionId || 'default', work);
+  }
+
+  /** 在会话「当前」历史后追加，而不是在某个旧快照后追加 */
+  private appendNow(sessionId: string, ...messages: Message[]): Message[] {
+    return this.sessions.setConversation(
+      sessionId,
+      this.sessions.appendMessages(this.sessions.getMessages(sessionId), ...messages)
+    );
+  }
+
   /** 该会话是否已有对话记录（内存没有时回源到库，内存淘汰不等于会话不存在） */
+  loadSession(sessionId: string) {
+    return this.sessions.loadDetail(sessionId);
+  }
+
   async sessionHasHistory(sessionId: string): Promise<boolean> {
     const { messages } = await this.sessions.loadDetail(sessionId);
     return messages.length > 0;
@@ -61,7 +81,9 @@ export class ChatService {
   async handleChat(
     body: any,
     onDelta?: ReplyDeltaHandler,
-    clientMeta?: ClientMeta
+    clientMeta?: ClientMeta,
+    /** 访客断开连接时取消，Agent 和模型请求都会随之中止 */
+    signal?: AbortSignal
   ): Promise<ChatResponse | { error: string }> {
     const message = String(body?.message || '').trim();
     const sessionId = String(body?.sessionId || 'default');
@@ -80,7 +102,8 @@ export class ChatService {
       : null;
     const attachments = normalizeAttachments(body?.attachments);
     const clientMessageId = String(body?.clientMessageId || '').slice(0, 64) || null;
-    const tenantKey = String(body?.siteKey || '').trim() || null;
+    // 已有会话一律按它绑定的租户取模型和工具开关；只有新会话才用请求里的 siteKey（控制器已核对过两者一致）
+    const tenantKey = this.sessions.get(sessionId)?.tenantKey || String(body?.siteKey || '').trim() || null;
     const preferAi = body?.preferAi === true;
     let storedHistory = this.sessions.getMessages(sessionId);
     let history = storedHistory.slice(-LIMITS.MAX_AI_HISTORY);
@@ -216,8 +239,24 @@ export class ChatService {
 
     // 租户在「租户管理」里指定了模型就用它，否则（或该模型不可用）用默认模型
     const tenantModelId = this.widgetKeys.get(tenantKey)?.modelId;
-    if (message) {
-      const agentTurn = await this.agent.handleUtterance({ message, sessionId, tenantKey, modelId: tenantModelId });
+    // 路由（详见 docs/reference.md「消息路由」）：
+    // 1. 访客明确要人工（转人工 / 找人工 …）：规则直接处理，不经过 Agent，保证一定能建跟进事项。
+    // 2. 其余消息先给 Agent：只有它真的调用了工具才算接手；模型只回了文字、或第一步就失败，
+    //    都交回下面的普通流程（FAQ 检索 + 人设 + 流式输出 + 转人工规则）。
+    const explicitHandoff = detectIntent(message) === 'human_handoff';
+
+    // 访客消息先落库，再去请求模型：
+    // - 工作台立刻能看到这条消息；
+    // - 回复生成期间会话已经「有历史」，同一会话的新请求必须出示访客令牌（A6）；
+    // - 回复写回时按最新历史追加（appendNow），不会用请求开始时的快照覆盖掉
+    //   期间新增的消息（A5：并发消息 / 客服插话丢失）。
+    this.appendNow(
+      sessionId,
+      this.sessions.createMessage({ role: 'user', actor: 'customer', content: message, attachments, clientMessageId })
+    );
+
+    if (message && !explicitHandoff) {
+      const agentTurn = await this.agent.handleUtterance({ message, sessionId, tenantKey, modelId: tenantModelId, history, signal });
       if (agentTurn?.handled) {
         const assistant = this.sessions.createMessage({
           role: 'assistant',
@@ -226,11 +265,7 @@ export class ChatService {
           agentAction: agentTurn.action,
           agentTrace: agentTurn.traces,
         });
-        const nextHistory = this.sessions.appendMessages(
-          storedHistory,
-          this.sessions.createMessage({ role: 'user', actor: 'customer', content: message, attachments, clientMessageId }),
-          assistant,
-        );
+        const nextHistory = this.appendNow(sessionId, assistant);
         const ticket = agentTurn.handoff ? this.tickets.getLatestForSession(sessionId) : null;
         const workflow: Workflow = {
           ai: { provider: this.ai.provider, model: this.ai.getActiveModel(), used: false, fallback: agentTurn.degraded, error: null },
@@ -242,7 +277,6 @@ export class ChatService {
           ticket,
           sources: [],
         };
-        this.sessions.setConversation(sessionId, nextHistory);
         this.sessions.upsertSession({
           sessionId, message, workflow, profile, visitor, tenantKey,
           ...(agentTurn.handoff ? { forceStatus: 'waiting_human' as const } : {}),
@@ -280,12 +314,12 @@ export class ChatService {
 
     const replyResult = await this.ai.buildReply(
       { message, history, matchedFaqs, intent, handoff, inquiry, ticket, modelId: tenantModelId },
-      onDelta
+      onDelta,
+      signal
     );
     const reply = replyResult.text;
-    const nextHistory = this.sessions.appendMessages(
-      storedHistory,
-      this.sessions.createMessage({ role: 'user', actor: 'customer', content: message, attachments, clientMessageId }),
+    const nextHistory = this.appendNow(
+      sessionId,
       this.sessions.createMessage({ role: 'assistant', actor: 'ai', content: reply })
     );
     const workflow: Workflow = {
@@ -302,7 +336,6 @@ export class ChatService {
         score: Number(faq.score.toFixed(2)),
       })),
     };
-    this.sessions.setConversation(sessionId, nextHistory);
     this.sessions.upsertSession({ sessionId, message, workflow, profile, visitor, tenantKey });
     this.sessionTicket.notify(sessionId);
     return {
@@ -318,7 +351,8 @@ export class ChatService {
   async decideAgentAction(body: { sessionId: string; actionId: string; decision: 'confirm' | 'cancel'; siteKey?: string | null }) {
     const sessionId = String(body.sessionId || '');
     await this.sessions.loadDetail(sessionId);
-    const tenantKey = String(body.siteKey || '').trim() || null;
+    // 工具开关按会话自己的租户判断，不按请求里的 siteKey
+    const tenantKey = this.sessions.get(sessionId)?.tenantKey || String(body.siteKey || '').trim() || null;
     const turn = await this.agent.decide({
       sessionId,
       actionId: body.actionId,
@@ -326,6 +360,17 @@ export class ChatService {
       tenantKey,
       message: body.decision === 'confirm' ? '访客确认办理' : '访客取消办理',
     });
+    if (turn.alreadyHandled) {
+      // 幂等：连点「确认」或重放请求时，第一次已经落库了结果，这里原样返回当前会话，
+      // 不再追加「这条操作已经处理过了」之类的消息污染聊天记录，也不触发会话更新推送
+      return {
+        sessionId,
+        reply: turn.reply,
+        alreadyHandled: true,
+        session: this.sessions.get(sessionId)!,
+        messages: this.sessions.getMessages(sessionId),
+      };
+    }
     const history = this.sessions.getMessages(sessionId).map((message) => (
       message.agentAction?.id === body.actionId && turn.action
         ? { ...message, agentAction: { ...message.agentAction, status: turn.action.status } }

@@ -3,7 +3,8 @@ import type * as echarts from 'echarts';
 import type { Tenant, TenantStats } from '@assistflow/shared';
 import { fmtTime, requestJson } from '../api.js';
 import { showToast, confirmDialog } from '../ui/feedback.js';
-import EChart from '../ui/EChart.js';
+import { copyText } from '../ui/clipboard.js';
+import EChart from '../ui/LazyEChart.js';
 import Icon from '../ui/Icon.js';
 import EmptyState from '../ui/EmptyState.js';
 import Select from '../ui/Select.js';
@@ -46,28 +47,6 @@ function genTenantKey(): string {
     }
   }
   return chars.join('').replace(/(.{4})(?=.)/g, '$1-');
-}
-
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    // 非安全上下文（http 域名）没有 clipboard API，退回旧方案
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand('copy');
-      ta.remove();
-      return ok;
-    } catch {
-      return false;
-    }
-  }
 }
 
 /** 模型管理里的模型（租户指定 AI 模型用） */

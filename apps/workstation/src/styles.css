@@ -30,6 +30,17 @@ html, body, #root { height: 100%; margin: 0; }
   --warn: #b45309;
   --warn-soft: #fef3e2;
   --danger: #dc2626;
+
+  /* 状态色板：全站状态标签（会话头部、跟进事项、接待大厅）只用这 5 组。
+     原则：只有「现在就要处理」的状态才用饱和色；进行中用品牌色的浅底；结束/无需处理用灰。 */
+  --st-neutral-bg: #f1f3f5;   --st-neutral-fg: #6c6f72;   /* 已结束 / 已解决 / 普通 */
+  --st-active-bg: #e6f7f5;    --st-active-fg: #0f766e;    /* AI 接待中 / 人工接待 / 处理中 */
+  --st-ok-bg: #eaf7ee;        --st-ok-fg: #15803d;        /* 启用等正向配置状态 */
+  --st-attention-bg: #fef3e2; --st-attention-fg: #b45309; /* 待人工 / 待处理：轮到我们了 */
+  --st-urgent-bg: #dc2626;    --st-urgent-fg: #ffffff;    /* 急：唯一的实心饱和色 */
+  /* 深色侧栏上的同语义颜色 */
+  --st-attention-on-dark: #fbbf24;
+  --st-urgent-on-dark: #f87171;
 }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #3d4249; background: #fff; -webkit-font-smoothing: antialiased; }
 button { font-family: inherit; }
@@ -90,9 +101,9 @@ button { font-family: inherit; }
 .sess-main { flex: 1; min-width: 0; }
 .sess-top { display: flex; align-items: center; gap: 6px; }
 .name { flex: 1; font-weight: 500; font-size: 14px; color: var(--side-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prio-tag { flex-shrink: 0; font-size: 12px; font-weight: 600; line-height: 1; color: #fff; background: var(--danger); border-radius: 4px; padding: 3px 5px; }
-.human-tag { flex-shrink: 0; font-size: 12px; font-weight: 600; line-height: 1; color: #fff; background: var(--warn); border-radius: 4px; padding: 3px 5px; }
-.mood-tag { flex-shrink: 0; font-size: 14px; line-height: 1; color: #fcd34d; cursor: default; }
+.prio-tag { flex-shrink: 0; font-size: 12px; font-weight: 600; line-height: 1; color: var(--st-urgent-fg); background: var(--st-urgent-bg); border-radius: 4px; padding: 3px 5px; }
+.human-tag { flex-shrink: 0; font-size: 12px; font-weight: 600; line-height: 1; color: var(--st-attention-on-dark); background: transparent; box-shadow: inset 0 0 0 1px rgba(251,191,36,.45); border-radius: 4px; padding: 2px 5px; }
+.mood-tag { flex-shrink: 0; display: inline-flex; font-size: 14px; line-height: 1; color: var(--st-attention-on-dark); cursor: default; }
 .last { display: flex; align-items: center; gap: 8px; color: var(--side-muted); font-size: 13px; margin-top: 4px; opacity: .9; }
 .last-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 接待大厅会话：发送即接待的提示条 */
@@ -135,6 +146,8 @@ button { font-family: inherit; }
 .toast-success { background: #eef8f2; border-color: #b7e0c7; color: #12683f; }
 .toast-warning { background: #fdf6ec; border-color: #f7ddb2; color: #92500e; }
 .toast-error { background: #fdf2f2; border-color: #fecaca; color: #b42318; }
+.toast-count { margin-left: 8px; padding: 0 6px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: rgba(20,24,29,.06); font-variant-numeric: tabular-nums; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 .dialog-overlay { position: fixed; inset: 0; background: rgba(20,24,29,.45); animation: afw-fade .15s ease-out; z-index: 210;
   display: flex; align-items: center; justify-content: center; }
@@ -153,10 +166,10 @@ button { font-family: inherit; }
 .role-badge { margin-left: 6px; padding: 2px 7px; border-radius: 8px; font-size: 12px;
   font-weight: 600; color: #fff; background: #d97706; }
 .tag { font-size: 12px; padding: 3px 10px; border-radius: 999px; line-height: 18px; display: inline-block; font-weight: 500; box-shadow: inset 0 0 0 1px rgba(20,24,29,.06); }
-.tag-info { background: #f8f9fa; color: #989a9e; }
-.tag-warning { background: #fffbeb; color: #e6a23c; }
-.tag-success { background: #f0f9eb; color: #16a34a; }
-.tag-primary { background: #e6f7f5; color: #0d9488; }
+.tag-info { background: var(--st-neutral-bg); color: var(--st-neutral-fg); }
+.tag-warning { background: var(--st-attention-bg); color: var(--st-attention-fg); }
+.tag-success { background: var(--st-ok-bg); color: var(--st-ok-fg); }
+.tag-primary { background: var(--st-active-bg); color: var(--st-active-fg); }
 .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #989a9e; font-size: 16px; padding: 40px 16px; gap: 8px; height: 100%; }
 .empty-hint-mobile { display: none; }
 /* 统一空状态：线性插画 + 标题 + 说明 + 描边动作按钮 */
@@ -186,10 +199,10 @@ button { font-family: inherit; }
 .chat-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 /* 接待状态标签：AI=浅青、待人工=琥珀、人工=实心青、结束=灰 */
 .status-pill { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.status-pill--ai { background: var(--accent-soft); color: var(--accent-hover); }
-.status-pill--warn { background: var(--warn-soft); color: var(--warn); }
-.status-pill--human { background: var(--accent); color: #fff; }
-.status-pill--muted { background: var(--surface-muted); color: var(--ink-3); }
+.status-pill--ai { background: var(--st-active-bg); color: var(--st-active-fg); }
+.status-pill--warn { background: var(--st-attention-bg); color: var(--st-attention-fg); }
+.status-pill--human { background: var(--st-active-bg); color: var(--st-active-fg); }
+.status-pill--muted { background: var(--st-neutral-bg); color: var(--st-neutral-fg); }
 .head-icon-btn { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink-3); cursor: pointer; transition: background .12s, color .12s, border-color .12s; }
 .head-icon-btn:hover { color: var(--ink); border-color: #d0d3d7; }
 .head-icon-btn.active { background: var(--accent-soft); border-color: transparent; color: var(--accent-hover); }
@@ -214,6 +227,12 @@ button { font-family: inherit; }
 .bubble a { color: var(--accent-hover); text-decoration: underline; word-break: break-all; }
 .agent .bubble a { color: #fff; }
 .agent .bubble .md-code { background: rgba(255,255,255,.18); }
+/* 不是自己发的客服消息（管理员插话 / 同事的回复）：同在右侧，但用浅色气泡并写明发送者 */
+.avatar.agent.other { background: var(--st-active-fg); }
+.avatar.agent.admin { background: #475569; }
+.row.other-agent .bubble { background: var(--st-active-bg); color: var(--ink); }
+.row.other-agent .bubble a { color: var(--accent-hover); }
+.row.other-agent .bubble .md-code { background: rgba(15,118,110,.08); }
 .txt { white-space: pre-wrap; }
 .time { font-size: 14px; color: #989a9e; margin: 4px 4px 0; }
 .row.ai .time, .row.agent .time { text-align: right; }
@@ -272,6 +291,7 @@ button { font-family: inherit; }
 .conn-synced { color: #16a34a; }
 .conn-syncing { color: #d97706; }
 .conn-reconnecting { color: #dc2626; }
+.conn-revoked { color: var(--st-neutral-fg); }
 /* 加载失败/重试块 */
 .state-block { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 12px; color: #989a9e; font-size: 16px; background: #f1f3f5; }
@@ -559,7 +579,8 @@ body.is-col-resizing, body.is-col-resizing * { cursor: col-resize !important; us
 .section-empty { color: var(--side-muted); font-size: 14px; text-align: center; padding: 18px 12px; }
 /* 时间列：常规显示时钟时间；待人工显示等待时长（橙色，驱动接单） */
 .sess-time { flex-shrink: 0; font-size: 12px; color: var(--side-muted); font-variant-numeric: tabular-nums; }
-.sess-time.waiting { color: #fcd34d; font-weight: 600; }
+/* 等待时长：未超时是普通灰字，超过 SLA 才变警示色 */
+.sess-time.overdue { color: var(--st-attention-on-dark); font-weight: 600; }
 
 /* ---- 会话详情侧栏 ---- */
 .chat-body { flex: 1; display: flex; min-height: 0; }
@@ -653,8 +674,8 @@ body.is-col-resizing, body.is-col-resizing * { cursor: col-resize !important; us
 .ticket-table td.reason { white-space: normal; max-width: 250px; min-width: 180px; }
 .ticket-table .last-msg { max-width: 220px; color: #6c6f72; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ticket-table .ops { display: flex; gap: 6px; flex-wrap: nowrap; }
-.prio-btn { background: #f1f3f5; border: none; border-radius: 999px; color: #6c6f72; cursor: pointer; font-size: 14px; padding: 4px 10px; }
-.prio-btn.high { background: #fef2f2; color: #dc2626; }
+.prio-btn { background: var(--st-neutral-bg); border: none; border-radius: 4px; color: var(--st-neutral-fg); cursor: pointer; font-size: 12px; font-weight: 500; line-height: 1.4; padding: 3px 6px; }
+.prio-btn.high { background: var(--st-urgent-bg); color: var(--st-urgent-fg); font-weight: 600; }
 .prio-btn:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ---- 跟进事项：工具栏 / 归属 / 详情弹窗 ---- */
@@ -1078,9 +1099,9 @@ body.is-col-resizing, body.is-col-resizing * { cursor: col-resize !important; us
 .link-btn:disabled { opacity: .4; cursor: not-allowed; }
 .link-btn.danger { color: #b42318; }
 .link-btn.danger:hover:not(:disabled) { background: #fef2f2; }
-.tag-green { background: #eaf7ee; color: #15803d; }
-.tag-gray { background: #f1f3f5; color: #6c6f72; }
-.tag-brand { background: #e6f7f5; color: #0d9488; }
+.tag-green { background: var(--st-ok-bg); color: var(--st-ok-fg); }
+.tag-gray { background: var(--st-neutral-bg); color: var(--st-neutral-fg); }
+.tag-brand { background: var(--st-active-bg); color: var(--st-active-fg); }
 .row-actions { white-space: nowrap; }
 
 /* 通用数据表（复用 ticket-table 视觉） */
@@ -1260,3 +1281,57 @@ button.switch:disabled { opacity: .5; cursor: not-allowed; }
 .af-select-menu button:hover:not(:disabled) { background: #f4f4f5; }
 .af-select-menu button.active { background: #e6f7f5; color: #0f766e; }
 .af-select-menu button:disabled { color: #a1a1aa; cursor: not-allowed; }
+
+/* 详情栏：访客编号 + 复制按钮 */
+.detail-code { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.detail-code .mono { overflow-wrap: anywhere; }
+.copy-btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: #64748b; cursor: pointer;
+}
+.copy-btn:hover { background: #f1f5f9; color: #0f172a; }
+.copy-btn:focus-visible { outline: 2px solid #3b82f6; outline-offset: 1px; }
+
+/* 图表块加载失败：只在卡片内提示，可重试 */
+.chart-error { width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; border-radius: 8px; background: #f8fafc; color: #64748b; font-size: 14px; text-align: center; }
+.chart-error p { margin: 0; }
+.chart-error-hint { font-size: 12px; color: #94a3b8; }
+.chart-error-actions { display: flex; gap: 8px; margin-top: 4px; }
+.chart-error .retry-btn { padding: 4px 14px; font-size: 13px; }
+
+/* 图表块下载中：固定高度的骨架 + spinner，避免卡片高度跳动 */
+@keyframes chart-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.chart-loading { width: 100%; display: flex; align-items: center; justify-content: center; border-radius: 8px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%;
+  animation: chart-shimmer 1.4s ease-in-out infinite; }
+.chart-spinner { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #cbd5e1; border-top-color: #0d9488;
+  animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .chart-loading, .chart-spinner { animation: none; } }
+
+/* 会话被其他客服抢先接待：说明 + 草稿 */
+.lost-session { margin: auto; max-width: 520px; padding: 24px; display: flex; flex-direction: column; gap: 10px; text-align: center; color: #475569; }
+.lost-title { margin: 0; font-size: 16px; font-weight: 600; color: #0f172a; }
+.lost-hint { margin: 0; font-size: 14px; }
+.lost-draft { margin: 4px 0 0; padding: 12px 14px; max-height: 240px; overflow: auto; text-align: left; white-space: pre-wrap; word-break: break-word;
+  font: inherit; font-size: 14px; color: #0f172a; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+.lost-actions { display: flex; justify-content: center; gap: 8px; }
+.lost-actions .retry-btn { padding: 6px 14px; font-size: 14px; }
+
+/* 跟进事项：每行一个主操作 + 「更多」下拉，操作列不再挤 4 个按钮 */
+.ticket-table--tickets th:last-child,
+.ticket-table--tickets td:last-child { width: 176px; min-width: 176px; }
+.row-actions { display: flex; align-items: center; gap: 2px; }
+.ticket-table-wrap td .ghost-btn.row-primary { color: var(--st-active-fg); font-weight: 600; }
+.ticket-table-wrap td .ghost-btn.row-menu-btn { color: var(--ink-3); }
+.ticket-table-wrap td .ghost-btn.row-menu-btn[aria-expanded="true"] { background: var(--st-neutral-bg); color: var(--ink); }
+.row-menu-caret { font-size: 10px; margin-left: 2px; }
+.row-menu { position: fixed; z-index: 300; min-width: 132px; padding: 4px; background: #fff; border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 10px 24px rgba(0,0,0,.1); display: flex; flex-direction: column;
+  animation: afw-fade .12s ease-out; }
+.row-menu [role="menuitem"] { text-align: left; background: transparent; border: 0; border-radius: 6px; padding: 8px 10px;
+  font-size: 14px; color: var(--ink-2); cursor: pointer; }
+.row-menu [role="menuitem"]:hover, .row-menu [role="menuitem"]:focus-visible { background: var(--st-active-bg); color: var(--st-active-fg); outline: none; }
+.row-menu [role="menuitem"]:disabled { opacity: .4; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .row-menu { animation: none; } }

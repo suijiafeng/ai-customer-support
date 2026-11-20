@@ -56,6 +56,8 @@ export interface Message {
   content: string;
   agentId: string | null;
   agentName: string | null;
+  /** 发送这条消息的客服当时的角色：工作台据此把管理员插话标成「管理员 xxx」。旧消息没有该字段。 */
+  agentRole?: 'agent' | 'admin' | null;
   attachments: Attachment[];
   createdAt: string;
   /** 访客确认卡片。没有工具动作时不出现。 */

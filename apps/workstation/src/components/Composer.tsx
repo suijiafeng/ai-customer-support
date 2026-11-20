@@ -5,6 +5,7 @@ import {
   type AgentIdentity, type PendingAttachment, type UiMessage,
 } from '../api.js';
 import { showToast } from '../ui/feedback.js';
+import { clearDraft, loadDraft, saveDraft } from '../ui/drafts.js';
 import Icon from '../ui/Icon.js';
 import EmojiPicker from './EmojiPicker.js';
 
@@ -98,11 +99,23 @@ export default function Composer({ sessionId, agent, onSent }: ComposerProps) {
     return () => document.removeEventListener('mousedown', onDown);
   }, [showEmoji, showCanned]);
 
-  // 切换会话时重置输入区
+  // 切换会话时：恢复该会话的草稿（没有就是空），附件和弹层重置
+  // 切换的这一次提交里 reply 还是上一个会话的内容，不能存进新会话：跳过一次保存
+  const skipSave = useRef(false);
   useEffect(() => {
-    setReply(''); setPending([]); setShowEmoji(false);
+    skipSave.current = true;
+    setReply(sessionId ? loadDraft(agent.id, sessionId) : ''); setPending([]); setShowEmoji(false);
     requestAnimationFrame(() => replyInput.current?.focus());
-  }, [sessionId]);
+  }, [sessionId, agent.id]);
+
+  // 每次输入都落一份草稿：会话被别的客服抢接、输入框被卸载时，内容还在
+  useEffect(() => {
+    if (skipSave.current) {
+      skipSave.current = false;
+      return;
+    }
+    if (sessionId) saveDraft(agent.id, sessionId, reply);
+  }, [reply, sessionId, agent.id]);
 
   const addFiles = useCallback(async (files: Iterable<File>) => {
     const list = [...files].filter((f) => f && f.type.startsWith('image/') && f.size <= MAX_IMAGE_BYTES);
@@ -153,16 +166,17 @@ export default function Composer({ sessionId, agent, onSent }: ComposerProps) {
         }
       );
       onSent?.(normalizeMessages(data.messages));
+      clearDraft(agent.id, sessionId);
       setReply(''); setPending([]); setShowEmoji(false);
     } catch (err) {
-      // 409：发送瞬间该客户已被其他客服抢先接待
+      // 409：发送瞬间该客户已被其他客服抢先接待。输入框内容不清空，草稿也已存好
       const conflict = err instanceof ApiError && err.status === 409;
-      showToast(conflict ? '该客户已被其他客服抢先接待，无法回复' : '消息发送失败，请重试', 'error');
+      showToast(conflict ? '该客户已被其他客服抢先接待，你的回复已保留为草稿' : '消息发送失败，请重试', 'error');
     } finally {
       setLoading(false);
       requestAnimationFrame(() => replyInput.current?.focus());
     }
-  }, [reply, pending, sessionId, loading, onSent]);
+  }, [reply, pending, sessionId, loading, onSent, agent.id]);
 
   // 快捷回复：常用语一键插入输入框
   const insertCanned = useCallback((text: string) => {

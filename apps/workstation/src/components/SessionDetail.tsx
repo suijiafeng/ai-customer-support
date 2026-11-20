@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import type { SessionSummary, Ticket } from '@assistflow/shared';
+import { isUrgentSession, type SessionSummary, type Ticket } from '@assistflow/shared';
 import { fmtTime, intentText, requestJson } from '../api.js';
 import { showToast, confirmDialog } from '../ui/feedback.js';
 import Icon from '../ui/Icon.js';
+import { copyText } from '../ui/clipboard.js';
 
 const SENTIMENT_TEXT: Record<string, string> = { positive: '积极', neutral: '中性', negative: '消极' };
 const TICKET_STATUS: Record<string, string> = { open: '待处理', processing: '处理中', resolved: '已解决' };
@@ -52,7 +53,26 @@ export default function SessionDetail({ session, onClose, canResolve = true, doc
           <h4>访客</h4>
           <dl>
             {session.profile?.contact && <div><dt>联系方式</dt><dd>{session.profile.contact}</dd></div>}
-            {session.visitor?.code && <div><dt>访客标识</dt><dd className="mono">{session.visitor.code}</dd></div>}
+            {session.visitor?.code && (
+              <div>
+                <dt>访客编号</dt>
+                <dd className="detail-code">
+                  <span className="mono">{session.visitor.code}</span>
+                  <button
+                    type="button"
+                    className="copy-btn"
+                    aria-label="复制访客编号"
+                    title="复制访客编号"
+                    onClick={async () => {
+                      const ok = await copyText(session.visitor!.code!);
+                      showToast(ok ? '访客编号已复制' : '复制失败，请手动选择', ok ? 'success' : 'error');
+                    }}
+                  >
+                    <Icon name="copy" size={14} />
+                  </button>
+                </dd>
+              </div>
+            )}
             {session.visitor?.ip && <div><dt>IP 地址</dt><dd className="mono">{session.visitor.ip}</dd></div>}
             {session.visitor?.device && <div><dt>设备</dt><dd>{session.visitor.device}</dd></div>}
             {session.visitor?.pageUrl && (
@@ -62,7 +82,7 @@ export default function SessionDetail({ session, onClose, canResolve = true, doc
               </div>
             )}
             <div><dt>开始时间</dt><dd>{fmtTime(session.createdAt) || '—'}</dd></div>
-            <div><dt>优先级</dt><dd>{session.priority === 'high' ? '高' : '普通'}</dd></div>
+            <div><dt>优先级</dt><dd>{isUrgentSession(session) ? <span className="prio-tag">急</span> : '普通'}</dd></div>
           </dl>
         </section>
 

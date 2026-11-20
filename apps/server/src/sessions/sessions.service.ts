@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { LIMITS } from '@assistflow/shared';
+import { LIMITS, isUrgentSession } from '@assistflow/shared';
 import type {
   Attachment,
   Message,
@@ -135,6 +135,7 @@ export class SessionsService implements OnModuleInit {
     content: string;
     agentId?: string | null;
     agentName?: string | null;
+    agentRole?: 'agent' | 'admin' | null;
     attachments?: Attachment[];
     clientMessageId?: string | null;
     agentAction?: Message['agentAction'];
@@ -148,6 +149,7 @@ export class SessionsService implements OnModuleInit {
       content: params.content,
       agentId: params.agentId ?? null,
       agentName: params.agentName ?? null,
+      ...(params.agentRole ? { agentRole: params.agentRole } : {}),
       attachments: params.attachments ?? [],
       createdAt: new Date().toISOString(),
       ...(params.agentAction ? { agentAction: params.agentAction } : {}),
@@ -174,8 +176,9 @@ export class SessionsService implements OnModuleInit {
     const nextProfile = profile || current?.profile || null;
     const nextVisitor = visitor || current?.visitor || inferVisitorFromSessionId(sessionId);
     const status = forceStatus || resolveSessionStatus(current, workflow);
-    const keepHighPriority = current?.priority === 'high' && current?.status !== 'closed';
-    const priority = keepHighPriority || workflow.needHuman ? 'high' : 'normal';
+    // 与工作台「急」同一规则（@assistflow/shared 的 isUrgentSession）：有关联跟进事项看它的优先级，
+    // 否则看访客这句话是否明确催促。以前所有转人工会话一律 high，大厅排序和「高优先级」统计都失真。
+    const priority = isUrgentSession({ lastMessage: message, workflow }) ? 'high' : 'normal';
     const inquiryId = workflow.inquiry?.id || current?.inquiryId || extractInquiryId(message) || null;
     const displayName = this.buildDisplayName(sessionId, inquiryId, nextProfile, nextVisitor);
     const session: Session = {
@@ -198,7 +201,8 @@ export class SessionsService implements OnModuleInit {
       workflow,
       createdAt: current?.createdAt || now,
       updatedAt: now,
-      tenantKey: tenantKey ?? current?.tenantKey ?? null,
+      // 会话建立时绑定租户，之后不随消息改写（防止拿别的租户 siteKey 把会话「搬走」）
+      tenantKey: current?.tenantKey ?? tenantKey ?? null,
     };
     return this.setSession(session);
   }

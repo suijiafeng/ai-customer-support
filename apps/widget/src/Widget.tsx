@@ -49,6 +49,10 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
   const [input, setInput] = useState('');
   const [pending, setPending] = useState<PendingImage[]>([]); // 待发送图片附件
   const [showQuick, setShowQuick] = useState(false);
+  // 触屏设备（手机/平板）没有物理 Enter/Shift，占位文字不提键盘快捷键；软键盘回车键显示为「发送」
+  const [touch] = useState(
+    () => typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none) and (pointer: coarse)').matches,
+  );
   const [unread, setUnread] = useState(0); // 关闭状态下收到的新回复数（FAB 红点）
   const seenInboundRef = useRef(0); // 已读的 AI/客服消息数
   const baselinedRef = useRef(false); // 首次同步完成后才开始计增量，避免历史消息触发红点
@@ -135,6 +139,23 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
     return () => root.removeEventListener('mousedown', onDown as EventListener);
   }, [showEmoji, showQuick, closeEmoji]);
 
+  // Esc：先收起表情/快捷提问弹层，再按一次关闭整个窗口，焦点还给悬浮球
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.isComposing || e.defaultPrevented) return;
+      if (showEmoji || showQuick) {
+        closeEmoji();
+        setShowQuick(false);
+        return;
+      }
+      setOpen(false);
+      fabRef.current?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, showEmoji, showQuick, closeEmoji, fabRef]);
+
   const clearPending = useCallback(() => setPending([]), []);
   const onSendStart = useCallback(() => {
     closeEmoji();
@@ -155,7 +176,9 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
     send,
     retrySend,
     decideAction,
+    decidingId,
     humanAssigned,
+    waitingHuman,
     switchToAi,
   } = useChatSession({
     apiBase,
@@ -396,8 +419,16 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
                           <p>{m.agentAction.summary}</p>
                           {m.agentAction.demo && <div className="agent-demo">演示数据，不是真实订单系统</div>}
                           <div className="agent-card-actions">
-                            <button type="button" onClick={() => decideAction(m.agentAction!.id, 'cancel')}>取消</button>
-                            <button type="button" className="primary" onClick={() => decideAction(m.agentAction!.id, 'confirm')}>确认</button>
+                            <button type="button" disabled={decidingId !== null} onClick={() => decideAction(m.agentAction!.id, 'cancel')}>取消</button>
+                            <button
+                              type="button"
+                              className="primary"
+                              disabled={decidingId !== null}
+                              aria-busy={decidingId === m.agentAction.id}
+                              onClick={() => decideAction(m.agentAction!.id, 'confirm')}
+                            >
+                              {decidingId === m.agentAction.id ? '处理中…' : '确认'}
+                            </button>
                           </div>
                         </div>
                       )}
@@ -460,6 +491,13 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
               </div>
             )}
             {/* 人工接管期间 AI 让位：说明当前谁在接待，并给一个不必干等的出口 */}
+            {/* 已转人工但还没人认领：告诉访客在排队，以及排队期间 AI 仍会先回答 */}
+            {waitingHuman && !keyInvalid && (
+              <div className="handoff-bar queue" role="status" aria-live="polite">
+                <span className="queue-dot" aria-hidden="true" />
+                <span>已为你转接人工客服，正在排队等待接入；接入前 AI 会继续为你解答</span>
+              </div>
+            )}
             {humanAssigned && !keyInvalid && (
               <div className="handoff-bar" role="status">
                 <span>人工客服接待中，AI 已暂停自动回复</span>
@@ -474,7 +512,8 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
             <div className="composer">
               <textarea
                 rows={2}
-                placeholder="输入消息，Enter 发送…"
+                placeholder={touch ? '输入消息…' : '输入消息，Enter 发送…'}
+                enterKeyHint="send"
                 ref={taEl}
                 value={input}
                 maxLength={2000}

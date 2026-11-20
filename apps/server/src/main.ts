@@ -24,8 +24,8 @@ async function bootstrap() {
     .filter(Boolean);
   app.enableCors(
     corsOrigins.length
-      ? { origin: corsOrigins, allowedHeaders: ['Authorization', 'Content-Type', 'x-visitor-token'], methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'] }
-      : {}
+      ? { origin: corsOrigins, allowedHeaders: ['Authorization', 'Content-Type', 'x-visitor-token'], methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'], exposedHeaders: ['Retry-After'] }
+      : { exposedHeaders: ['Retry-After'] }
   );
   app.useBodyParser('json', { limit: '12mb' });
   app.enableShutdownHooks();

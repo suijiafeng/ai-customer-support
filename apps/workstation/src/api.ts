@@ -27,12 +27,37 @@ export async function fetchSseTicket(): Promise<string> {
   return data.ticket;
 }
 
+/**
+ * 「请重新核对身份」信号：遇到 403、SSE 推来 role / revoked 事件时发出，
+ * App 监听后调用 GET /api/auth/me，把被管理员改过的角色同步到界面（失效则回登录页）。
+ */
+export const AUTH_RECHECK_EVENT = 'assistflow:auth-recheck';
+export function requestAuthRecheck() {
+  try { window.dispatchEvent(new Event(AUTH_RECHECK_EVENT)); } catch {}
+}
+
+/** 服务端当前认定的身份（角色以账号当前值为准） */
+export async function fetchMe(): Promise<AgentIdentity> {
+  const data = await requestJson<{ agent: AgentIdentity }>('/api/auth/me');
+  return data.agent;
+}
+
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** 429 时服务端给出的剩余等待秒数（Retry-After），没有则为 0 */
+  retryAfter: number;
+  constructor(message: string, status: number, retryAfter = 0) {
     super(message);
     this.status = status;
+    this.retryAfter = retryAfter;
   }
+}
+
+function readRetryAfter(response: Response, data: any): number {
+  const fromBody = Number(data?.data?.retryAfter);
+  if (Number.isFinite(fromBody) && fromBody > 0) return Math.ceil(fromBody);
+  const fromHeader = Number(response.headers.get('retry-after'));
+  return Number.isFinite(fromHeader) && fromHeader > 0 ? Math.ceil(fromHeader) : 0;
 }
 
 export async function requestJson<T = any>(url: string, options?: RequestInit): Promise<T> {
@@ -41,12 +66,21 @@ export async function requestJson<T = any>(url: string, options?: RequestInit): 
   if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
   const response = await fetch(`${API}${url}`, { ...options, headers });
   const data = await response.json().catch(() => null);
-  if (response.status === 401 && !url.startsWith('/api/auth/')) {
-    // 登录态失效：清空并回到登录页
+  // 登录接口本身的 401 是「密码错误」，其余（含 /api/auth/me、sse-ticket）都表示登录态已失效
+  if (response.status === 401 && url !== '/api/auth/login') {
+    // 登录态失效（停用 / 删除 / 改密码 / 过期）：清空并回到登录页
     clearAuth();
     window.location.reload();
   }
-  if (!response.ok || !data) throw new ApiError(data?.msg || data?.error || `request failed: ${response.status}`, response.status);
+  // 403：可能是角色刚被降级，界面还停在旧权限。让 App 去服务端核对一次身份
+  if (response.status === 403 && !url.startsWith('/api/auth/')) requestAuthRecheck();
+  if (!response.ok || !data) {
+    throw new ApiError(
+      data?.msg || data?.error || `request failed: ${response.status}`,
+      response.status,
+      response.status === 429 ? readRetryAfter(response, data) : 0,
+    );
+  }
   return (data?.data ?? data) as T;
 }
 
@@ -72,6 +106,16 @@ export function saveAuth(token: string, agent: AgentIdentity) {
     localStorage.setItem(AGENT_KEY, JSON.stringify(agent));
     localStorage.setItem(LOGIN_AT_KEY, new Date().toISOString());
   } catch {}
+}
+
+/** 只更新本地缓存的身份（角色 / 姓名），保留现有令牌 */
+export function updateStoredAgent(agent: AgentIdentity) {
+  try { localStorage.setItem(AGENT_KEY, JSON.stringify(agent)); } catch {}
+}
+
+/** 换上新令牌（本人改完密码后服务端会下发一枚新的） */
+export function replaceToken(token: string) {
+  try { localStorage.setItem(TOKEN_KEY, token); } catch {}
 }
 
 export function getLoginAt(): string | null {

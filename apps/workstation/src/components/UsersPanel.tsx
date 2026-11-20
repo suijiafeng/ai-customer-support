@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { requestJson, getStoredAgent } from '../api.js';
+import { requestJson, getStoredAgent, replaceToken } from '../api.js';
 import { showToast, confirmDialog } from '../ui/feedback.js';
 import Icon from '../ui/Icon.js';
 import Select from '../ui/Select.js';
@@ -52,11 +52,13 @@ export default function UsersPanel() {
       if (editing) {
         const body: any = { name: form.name.trim(), role: form.role };
         if (form.password) body.password = form.password;
-        const res = await requestJson<{ user: AgentUser }>(`/api/admin/users/${encodeURIComponent(editing.id)}`, {
+        const res = await requestJson<{ user: AgentUser; token?: string }>(`/api/admin/users/${encodeURIComponent(editing.id)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
+        // 改了自己的密码：旧令牌已作废，换上服务端新发的令牌，免得下一次请求被踢回登录页
+        if (res.token) replaceToken(res.token);
         setUsers((list) => list.map((u) => (u.id === res.user.id ? res.user : u)));
         showToast('账号已更新', 'success');
       } else {

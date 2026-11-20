@@ -1,8 +1,9 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { SessionSummary } from '@assistflow/shared';
+import {
+  isAwaitingHuman, isUrgentSession, isWaitOverdue, visitorDisplayName, URGENT_WAIT_MINUTES, type SessionSummary,
+} from '@assistflow/shared';
 import { fmtTime, type AgentIdentity } from '../api.js';
 import Icon from '../ui/Icon.js';
-import { visitorDisplayName } from '../ui/visitor.js';
 
 // 列表时间：当天显示 HH:MM，非当天显示 M/D
 function fmtListTime(iso?: string): string {
@@ -59,16 +60,23 @@ interface SessionItemProps {
   active: boolean;
   /** 未读消息条数，0 为已读 */
   unread: number;
+  /** 在接待大厅里：大厅只有转人工会话，不再重复标「人工」 */
+  inHall?: boolean;
   onSelect: (id: string) => void;
 }
 
-const SessionItem = memo(function SessionItem({ s, active, unread, onSelect }: SessionItemProps) {
+const SessionItem = memo(function SessionItem({ s, active, unread, inHall = false, onSelect }: SessionItemProps) {
   const handleClick = useCallback(() => onSelect(s.sessionId), [s.sessionId, onSelect]);
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(s.sessionId); }
   }, [s.sessionId, onSelect]);
   const done = isDone(s.status);
   const waiting = !done && (s.status === 'waiting_human' || s.needHuman);
+  // 规则见 @assistflow/shared 的 urgency.ts：急=访客明确催促（与跟进事项优先级同一词表）；
+  // 等待超过 SLA 只把时长变成警示色；情绪负面单独一个 ⚠
+  const urgent = !done && isUrgentSession(s);
+  const overdue = waiting && isWaitOverdue(s.updatedAt);
+  const negative = !done && s.sentiment === 'negative';
 
   return (
     <div
@@ -82,10 +90,13 @@ const SessionItem = memo(function SessionItem({ s, active, unread, onSelect }: S
       <div className="sess-main">
         <div className="sess-top">
           <span className="name" title={s.displayName}>{visitorDisplayName(s.displayName)}</span>
-          {waiting && <span className="human-tag" title="访客请求人工接待">人工</span>}
-          {!done && s.priority === 'high' && <span className="prio-tag" title="高优先级">急</span>}
-          {!done && s.sentiment === 'negative' && <span className="mood-tag" title="客户情绪负面，请优先安抚"><Icon name="alert-triangle" size={14} /></span>}
-          <span className={`sess-time${waiting ? ' waiting' : ''}`}>
+          {waiting && !inHall && <span className="human-tag" title="访客请求人工接待">人工</span>}
+          {urgent && <span className="prio-tag" title="紧急：访客明确催促，或跟进事项被标为急">急</span>}
+          {negative && <span className="mood-tag" title="客户情绪负面，请优先安抚" aria-label="情绪负面"><Icon name="alert-triangle" size={14} /></span>}
+          <span
+            className={`sess-time${overdue ? ' overdue' : ''}`}
+            title={waiting ? (overdue ? `已等待超过 ${URGENT_WAIT_MINUTES} 分钟` : '已等待时长') : undefined}
+          >
             {waiting ? waitingFor(s.updatedAt) : fmtListTime(s.updatedAt)}
           </span>
         </div>
@@ -158,7 +169,7 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
     const kw = keyword.trim().toLowerCase();
     // 只收明确转人工、尚未被认领的会话。未认领的 FAQ 对话 status 仍是 bot，
     // 若把它们算进大厅，「全部」会被掏空，数据概览的待跟进（只数 waiting_human）也对不上。
-    const isPool = (s: SessionSummary) => s.status === 'waiting_human';
+    const isPool = (s: SessionSummary) => isAwaitingHuman(s);
     const isClosed = (s: SessionSummary) => isDone(s.status);
     const isMine = (s: SessionSummary) => s.assignedAgentId === agent?.id;
     // 访客最后发言 = 客服欠一条回复（旧后端无此字段时视为已回复，降级不误报）
@@ -181,7 +192,7 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
           (Number(isUnread(b)) - Number(isUnread(a))) ||
           byRecent(a, b)
       );
-    const poolTotal = sessions.filter(isPool).length; // 不受关键字过滤，显示真实待接待数
+    const poolTotal = sessions.filter(isPool).length; // 不受关键字过滤的真实待接待数（搜索时与匹配数一起显示）
     const others = sessions
       .filter((s) => {
         if (isPool(s)) return false;
@@ -222,8 +233,10 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
     setPoolOpen((v) => !v);
   }, []);
 
-  const renderItem = (s: SessionSummary) => (
-    <SessionItem key={s.sessionId} s={s} active={s.sessionId === activeId} unread={unreadCount(s)} onSelect={onSelect} />
+  const searching = keyword.trim().length > 0;
+
+  const renderItem = (s: SessionSummary, inHall = false) => (
+    <SessionItem key={s.sessionId} s={s} active={s.sessionId === activeId} unread={unreadCount(s)} inHall={inHall} onSelect={onSelect} />
   );
 
   return (
@@ -250,15 +263,24 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
           >
             <Icon name="inbox" size={16} />
             <span className="q-section-title">接待大厅</span>
-            {poolTotal > 0 && <span className="q-num" title={`${poolTotal} 位访客待接待`}>({poolTotal})</span>}
+            {/* 搜索时数字跟着列表走（匹配数/总数），不搜索时就是待接待总数 */}
+            {searching
+              ? poolTotal > 0 && (
+                <span className="q-num" title={`搜索匹配 ${pool.length} 位，共 ${poolTotal} 位访客待接待`}>
+                  ({pool.length}/{poolTotal})
+                </span>
+              )
+              : poolTotal > 0 && <span className="q-num" title={`${poolTotal} 位访客待接待`}>({poolTotal})</span>}
             <span className={`q-caret${poolOpen ? ' open' : ''}`}>▸</span>
           </div>
           <div className={`q-collapse${poolOpen ? ' open' : ''}`} aria-hidden={!poolOpen}>
             <div className="q-collapse-inner">
               <div role="list" className="q-list">
-                {pool.map(renderItem)}
+                {pool.map((s) => renderItem(s, true))}
                 {!pool.length && (
-                  <div className="section-empty">{ready ? '暂无待接待客户' : '连接中…'}</div>
+                  <div className="section-empty">
+                    {!ready ? '连接中…' : searching && poolTotal > 0 ? '没有匹配的待接待访客' : '暂无待接待客户'}
+                  </div>
                 )}
               </div>
             </div>
@@ -297,7 +319,7 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
                 ))}
               </div>
               <div role="list" className="q-list">
-                {others.map(renderItem)}
+                {others.map((s) => renderItem(s))}
                 {!others.length && (
                   <div className="section-empty">
                     {filter === 'reply'

@@ -57,7 +57,11 @@ export function useChatSession({
   const [atBottom, setAtBottom] = useState(true);
   const [keyInvalid, setKeyInvalid] = useState(false); // widget 接入密钥无效/停用：重试无意义，需和普通失败区分
   // 会话是否处于人工接管态：接管期间 AI 让位，需要在界面上说明并给「切回 AI」的出口
-  const [humanAssigned, setHumanAssigned] = useState(false);
+  // 会话接待状态（来自服务端 session.status）：bot / waiting_human / assigned / …
+  const [sessionStatus, setSessionStatus] = useState<string | null>(null);
+  const humanAssigned = sessionStatus === 'assigned';
+  // 已转人工、还没有客服认领：给访客一个「排队中」的明确反馈，客服认领（或回复）后切成接待中
+  const waitingHuman = sessionStatus === 'waiting_human';
 
   const [sessionId, setSessionId] = useState(() => loadVisitorId(siteKey) ?? '');
   const listEl = useRef<HTMLDivElement | null>(null);
@@ -102,7 +106,9 @@ export function useChatSession({
         const optimistic = current.filter((m) => !(m as any).actor && !confirmed.has(m.id));
         return optimistic.length ? [...next, ...optimistic] : next;
       });
-      if (force || atBottomRef.current) scrollToBottom();
+      // force 只代表「服务端权威结果、整体替换」，不代表要滚动：访客在流式输出时往上翻看历史，
+      // 回答结束后不能把他拽回底部；不在底部时保留「↓」按钮让他自己回去
+      if (atBottomRef.current) scrollToBottom();
     },
     [scrollToBottom]
   );
@@ -142,7 +148,7 @@ export function useChatSession({
         headers: visitorAuthHeaders(sessionId),
       });
       setMessages(data.messages);
-      setHumanAssigned(data.session?.status === 'assigned');
+      setSessionStatus(data.session?.status ?? null);
     } catch {}
 
     const es = new EventSource(
@@ -156,10 +162,22 @@ export function useChatSession({
         const payload = JSON.parse((event as MessageEvent).data);
         setMessages(payload.messages || []);
         // 客服接管/交还都会推 session 事件，据此实时切换界面上的人工接管提示
-        if (payload.session) setHumanAssigned(payload.session.status === 'assigned');
+        if (payload.session) setSessionStatus(payload.session.status ?? null);
       } catch {}
     });
-    es.onerror = () => setConnection('syncing');
+    es.onerror = () => {
+      // 服务端拒绝（401/403，比如令牌失效）时 EventSource 进入 CLOSED、不会自己重连：
+      // 停在「正在同步」没有意义，回到空闲态，下一次发送拿到新令牌后再订阅
+      if (es.readyState === EventSource.CLOSED) {
+        if (sessionEvents.current === es) {
+          sessionEvents.current = null;
+          subscribedSession.current = '';
+        }
+        setConnection('idle');
+        return;
+      }
+      setConnection('syncing');
+    };
   }, [apiBase, requestJson, setMessages]);
 
   // 确保会话 ID 合法：不存在则生成，已被篡改/损坏则重新生成
@@ -283,7 +301,7 @@ export function useChatSession({
         // 令牌刚落盘，这时才连得上会话 SSE，客服之后的回复才能推到挂件里
         await activate();
         setMessages(data.messages || [], true);
-        if (data?.session) setHumanAssigned(data.session.status === 'assigned');
+        if (data?.session) setSessionStatus(data.session.status ?? null);
       } catch (err: any) {
         const inflight = inflightRef.current;
         if (err?.code === TOKEN_REQUIRED && !options?.rotated) {
@@ -310,7 +328,7 @@ export function useChatSession({
         if (err?.status === 429) {
           startCooldown(err?.retryAfter > 0 ? err.retryAfter : 10);
         }
-        scrollToBottom();
+        if (atBottomRef.current) scrollToBottom();
       } finally {
         inflightRef.current = null;
         sendingRef.current = false;
@@ -381,25 +399,36 @@ export function useChatSession({
   /** 访客主动把会话切回 AI：以一条正常访客消息发出，服务端解除接管后照常回答 */
   const switchToAi = useCallback(() => send('让 AI 先回答', { preferAi: true }), [send]);
 
+  // 正在提交的待确认操作：期间卡片按钮禁用，连点「确认」只发一次请求
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+  const decidingRef = useRef<string | null>(null);
+
   const decideAction = useCallback(async (actionId: string, decision: 'confirm' | 'cancel') => {
     const sid = sessionIdRef.current;
-    if (!sid) return;
-    const data = await requestJson('/api/chat/agent-action', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...visitorAuthHeaders(sid) },
-      body: JSON.stringify({ sessionId: sid, siteKey, tenantId, actionId, decision }),
-    });
-    saveVisitorToken(sid, data?.visitorToken);
-    await activate();
-    setMessages(data.messages || [], true);
-    if (data?.session?.status === 'assigned') setHumanAssigned(true);
-    if (data?.session?.status && data.session.status !== 'assigned') setHumanAssigned(false);
+    if (!sid || decidingRef.current) return;
+    decidingRef.current = actionId;
+    setDecidingId(actionId);
+    try {
+      const data = await requestJson('/api/chat/agent-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...visitorAuthHeaders(sid) },
+        body: JSON.stringify({ sessionId: sid, siteKey, tenantId, actionId, decision }),
+      });
+      saveVisitorToken(sid, data?.visitorToken);
+      await activate();
+      setMessages(data.messages || [], true);
+      if (data?.session?.status) setSessionStatus(data.session.status);
+    } finally {
+      decidingRef.current = null;
+      setDecidingId(null);
+    }
   }, [requestJson, setMessages, siteKey, tenantId, activate]);
 
   return {
     connection,
     messages,
     humanAssigned,
+    waitingHuman,
     switchToAi,
     sending,
     atBottom,
@@ -412,5 +441,6 @@ export function useChatSession({
     send,
     retrySend,
     decideAction,
+    decidingId,
   };
 }

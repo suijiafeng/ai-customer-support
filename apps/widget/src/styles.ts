@@ -109,6 +109,18 @@ export default `
 .handoff-bar button { border: 1px solid var(--afw-brand); background: #fff; color: var(--afw-brand); border-radius: 8px;
   padding: 3px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .handoff-bar button:disabled { opacity: .5; cursor: not-allowed; }
+.handoff-bar.queue { justify-content: flex-start; background: #fff7ed; color: #9a3412; }
+/* 排队点：出现时闪 3 下提示状态变了，之后静止，不在角落里一直闪 */
+.queue-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #f97316;
+  animation: afw-queue-pulse 1.2s ease-in-out 3; }
+@keyframes afw-queue-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
+@media (prefers-reduced-motion: reduce) {
+  .queue-dot { animation: none; }
+  /* 「正在输入」不再闪烁：三个点按深浅静态排开，仍看得出是输入中 */
+  .typing-dots i { animation: none; }
+  .typing-dots i:nth-child(1) { opacity: .4; }
+  .typing-dots i:nth-child(2) { opacity: .7; }
+}
 .composer { margin: 8px 12px 12px; border: 1px solid transparent; border-radius: 12px;
   background: #f1f3f5; transition: border-color .2s, box-shadow .2s, background .2s; }
 .composer:focus-within { background: #fff; border-color: var(--afw-brand); box-shadow: 0 0 0 3px rgba(var(--afw-brand-rgb),.12); }
@@ -189,7 +201,8 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
 .afw.mobile { right: 0; bottom: 0; }
 .afw.mobile .fab { position: fixed; right: 18px; bottom: calc(44px + env(safe-area-inset-bottom, 0px)); }
 .afw.mobile .panel {
-  position: fixed; inset: 0; width: 100vw; height: 100dvh; border-radius: 0; bottom: 0;
+  /* 浮窗的 1px 边框在全屏时会把面板撑到 100vw + 2px，出现横向溢出：全屏去掉边框并按 border-box 计算 */
+  position: fixed; inset: 0; width: 100%; height: 100dvh; border: 0; border-radius: 0; bottom: 0; box-sizing: border-box;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .afw.mobile .col { max-width: 82%; }
@@ -204,5 +217,6 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
 .agent-card-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .agent-card-actions button { border: 1px solid #d0d3d7; background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 .agent-card-actions .primary { border: 0; background: var(--afw-brand); color: #fff; }
+.agent-card-actions button:disabled { opacity: .55; cursor: not-allowed; }
 .agent-card.done { font-size: 12px; color: #3d4249; }
 `;

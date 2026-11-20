@@ -36,6 +36,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
         msg = exception.message;
       }
 
+      if (status === HttpStatus.TOO_MANY_REQUESTS) {
+        // @nestjs/throttler 对具名限速只写 Retry-After-<name>（如 Retry-After-login）。
+        // 统一补一个标准 Retry-After 头，并放进 data.retryAfter，前端才能告诉用户要等多久。
+        const retryAfter = retryAfterSeconds(res);
+        if (retryAfter > 0) {
+          res.setHeader('Retry-After', String(retryAfter));
+          data = { ...(data ?? {}), retryAfter };
+        }
+      }
+
       return res.status(status).json({ code: status, msg, data });
     }
 
@@ -46,4 +56,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
       data: null,
     });
   }
+}
+
+/** 取限速剩余秒数：标准 Retry-After 优先，其次各具名限速器的 Retry-After-<name>，取最大值 */
+export function retryAfterSeconds(res: Pick<Response, 'getHeaderNames' | 'getHeader'>): number {
+  let max = 0;
+  for (const name of res.getHeaderNames()) {
+    const lower = name.toLowerCase();
+    if (lower !== 'retry-after' && !lower.startsWith('retry-after-')) continue;
+    const value = Number(res.getHeader(name));
+    if (Number.isFinite(value) && value > max) max = Math.ceil(value);
+  }
+  return max;
 }

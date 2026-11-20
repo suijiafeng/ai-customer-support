@@ -59,7 +59,9 @@ export class UsersController {
     try {
       const user = await this.auth.updateAgent(id, body, agent.id);
       if (!user) throw new NotFoundException({ error: 'user not found' });
-      return { user };
+      // 改的是自己的密码：旧令牌已作废，顺带发一枚新的，工作台存下后不会被踢回登录页
+      const changedOwnPassword = id === agent.id && body?.password !== undefined && String(body.password) !== '';
+      return changedOwnPassword ? { user, token: this.auth.reissueToken(id) } : { user };
     } catch (e: any) {
       if (e instanceof NotFoundException) throw e;
       this.toError(e);
