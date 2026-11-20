@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 // 轻量应用内反馈：toast 提示 + confirm 对话框，替代原生 window.alert/confirm。
 // 用模块级订阅，组件外（如 catch 块）也能直接调用 showToast / confirmDialog。
@@ -69,6 +69,28 @@ export function FeedbackHost() {
     emitConfirm();
   };
 
+  // 对话框打开时：Esc = 取消；焦点放到「取消」上（误按回车不会执行危险操作），关闭后还给原来的元素
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  useEffect(() => {
+    if (!confirm) return;
+    const previous = document.activeElement as HTMLElement | null;
+    cancelRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // 捕获阶段拦下，避免同一下 Esc 又关掉背后的详情栏/菜单
+      e.stopPropagation();
+      e.preventDefault();
+      closeRef.current(false);
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      previous?.focus?.();
+    };
+  }, [confirm]);
+
   return (
     <>
       <div className="toast-host" role="status" aria-live="polite">
@@ -81,7 +103,7 @@ export function FeedbackHost() {
           <div className="dialog" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <p className="dialog-msg">{confirm.message}</p>
             <div className="dialog-actions">
-              <button className="dialog-cancel" onClick={() => close(false)}>{confirm.cancelText}</button>
+              <button ref={cancelRef} className="dialog-cancel" onClick={() => close(false)}>{confirm.cancelText}</button>
               <button className="dialog-confirm" onClick={() => close(true)}>{confirm.confirmText}</button>
             </div>
           </div>
