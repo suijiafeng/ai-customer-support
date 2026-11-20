@@ -165,7 +165,19 @@ export function useChatSession({
         if (payload.session) setSessionStatus(payload.session.status ?? null);
       } catch {}
     });
-    es.onerror = () => setConnection('syncing');
+    es.onerror = () => {
+      // 服务端拒绝（401/403，比如令牌失效）时 EventSource 进入 CLOSED、不会自己重连：
+      // 停在「正在同步」没有意义，回到空闲态，下一次发送拿到新令牌后再订阅
+      if (es.readyState === EventSource.CLOSED) {
+        if (sessionEvents.current === es) {
+          sessionEvents.current = null;
+          subscribedSession.current = '';
+        }
+        setConnection('idle');
+        return;
+      }
+      setConnection('syncing');
+    };
   }, [apiBase, requestJson, setMessages]);
 
   // 确保会话 ID 合法：不存在则生成，已被篡改/损坏则重新生成
