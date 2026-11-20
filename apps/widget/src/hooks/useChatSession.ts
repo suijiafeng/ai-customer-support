@@ -106,7 +106,9 @@ export function useChatSession({
         const optimistic = current.filter((m) => !(m as any).actor && !confirmed.has(m.id));
         return optimistic.length ? [...next, ...optimistic] : next;
       });
-      if (force || atBottomRef.current) scrollToBottom();
+      // force 只代表「服务端权威结果、整体替换」，不代表要滚动：访客在流式输出时往上翻看历史，
+      // 回答结束后不能把他拽回底部；不在底部时保留「↓」按钮让他自己回去
+      if (atBottomRef.current) scrollToBottom();
     },
     [scrollToBottom]
   );
@@ -314,7 +316,7 @@ export function useChatSession({
         if (err?.status === 429) {
           startCooldown(err?.retryAfter > 0 ? err.retryAfter : 10);
         }
-        scrollToBottom();
+        if (atBottomRef.current) scrollToBottom();
       } finally {
         inflightRef.current = null;
         sendingRef.current = false;
