@@ -217,7 +217,7 @@ export class ChatService {
     // 租户在「租户管理」里指定了模型就用它，否则（或该模型不可用）用默认模型
     const tenantModelId = this.widgetKeys.get(tenantKey)?.modelId;
     if (message) {
-      const agentTurn = await this.agent.handleUtterance({ message, sessionId, tenantKey, modelId: tenantModelId });
+      const agentTurn = await this.agent.handleUtterance({ message, sessionId, tenantKey, modelId: tenantModelId, history });
       if (agentTurn?.handled) {
         const assistant = this.sessions.createMessage({
           role: 'assistant',

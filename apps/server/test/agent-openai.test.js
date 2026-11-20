@@ -153,3 +153,33 @@ test('A7：外部 signal（访客断开）会取消进行中的模型请求', as
     await mock.close();
   }
 });
+
+test('A3：Agent 能看到之前的对话（承接上文的「那就改地址吧」）', async () => {
+  const { AgentService } = await import('../dist/agent/agent.service.js');
+  const mock = await startMockOpenAI(() => ({ text: '' }));
+  try {
+    const ai = { clientForModel: () => client(mock), connectionFor: () => ({ model: 'mock-model' }) };
+    const agent = new AgentService({ create: () => ({ id: 'T-1', status: 'open' }) }, new AgentActionService(), new AgentAuditService(), ai);
+    const history = [
+      { id: '1', role: 'user', actor: 'customer', content: '我的订单 DEMO-ABCD01 地址填错了', createdAt: '' },
+      { id: '2', role: 'assistant', actor: 'ai', content: '要改成什么地址？', createdAt: '' },
+      { id: '3', role: 'assistant', actor: 'agent', content: '我是人工客服', createdAt: '' },
+    ];
+    await agent.handleUtterance({ message: '那就改成南京市鼓楼区 9 号吧', sessionId: 'v-a3abcd', tenantKey: null, history });
+    const sent = mock.requests[0].messages.filter((m) => m.role !== 'system');
+    assert.deepEqual(sent.map((m) => m.role), ['user', 'assistant', 'assistant', 'user']);
+    assert.equal(sent[0].content, '我的订单 DEMO-ABCD01 地址填错了');
+    assert.match(sent[2].content, /^（人工客服）/);
+    assert.equal(sent.at(-1).content, '那就改成南京市鼓楼区 9 号吧');
+  } finally {
+    await mock.close();
+  }
+});
+
+test('A3：本地规则只看本条消息，不会因为历史里提过订单就调工具', async () => {
+  const { AgentService } = await import('../dist/agent/agent.service.js');
+  const agent = new AgentService({ create: () => ({ id: 'T-1', status: 'open' }) }, new AgentActionService(), new AgentAuditService(), { clientForModel: () => null, connectionFor: () => ({ model: 'x' }) });
+  const history = [{ id: '1', role: 'user', actor: 'customer', content: '查订单', createdAt: '' }];
+  const turn = await agent.handleUtterance({ message: '谢谢', sessionId: 'v-a3local', tenantKey: null, history });
+  assert.equal(turn, null);
+});

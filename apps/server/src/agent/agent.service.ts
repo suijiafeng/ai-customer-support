@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { AgentActionCard, AgentTraceStep, Ticket } from '@assistflow/shared';
+import { LIMITS } from '@assistflow/shared';
+import type { AgentActionCard, AgentTraceStep, Message, Ticket } from '@assistflow/shared';
 import { AiService } from '../ai/ai.service.js';
 import { TicketsService } from '../tickets/tickets.service.js';
 import { WidgetKeysService } from '../widget-keys/widget-keys.service.js';
@@ -8,7 +9,7 @@ import { AgentAuditService } from './audit.js';
 import { createBuiltinTools } from './builtin-tools.js';
 import { DemoCommerce } from './commerce.js';
 import { localPlanner } from './planner.js';
-import { runAgentLoop, type LoopOutcome } from './loop.js';
+import { runAgentLoop, type LoopOutcome, type ModelMessage } from './loop.js';
 import { openAiToolClient } from './openai-tools.js';
 import { ToolRegistry } from './registry.js';
 
@@ -38,10 +39,20 @@ export class AgentService {
     for (const tool of createBuiltinTools(this.commerce, this.tickets)) this.registry.register(tool);
   }
 
-  async handleUtterance(input: { message: string; sessionId: string; tenantKey: string | null; modelId?: string | null }): Promise<AgentTurn | null> {
+  async handleUtterance(input: {
+    message: string;
+    sessionId: string;
+    tenantKey: string | null;
+    modelId?: string | null;
+    /** 本条之前的对话，用来理解「那就改地址吧」这类承接上文的话 */
+    history?: Message[];
+    signal?: AbortSignal;
+  }): Promise<AgentTurn | null> {
     this.applyTenantTools(input.tenantKey);
     const outcome = await runAgentLoop({
       message: input.message,
+      history: toModelHistory(input.history),
+      signal: input.signal,
       registry: this.registry,
       model: this.modelFor(input.modelId),
       ctx: { sessionId: input.sessionId, tenantKey: input.tenantKey, message: input.message },
@@ -111,4 +122,14 @@ export class AgentService {
       degraded: outcome.degraded,
     };
   }
+}
+
+/** 会话消息 → 模型历史：访客是 user，AI / 人工 / 系统提示都是 assistant；人工回复标明身份，避免模型以为是自己说的。 */
+export function toModelHistory(history: Message[] = []): ModelMessage[] {
+  return history
+    .filter((m) => m.content && m.content.trim())
+    .slice(-LIMITS.MAX_AI_HISTORY)
+    .map((m) => m.role === 'user'
+      ? { role: 'user' as const, content: m.content }
+      : { role: 'assistant' as const, content: m.actor === 'agent' ? `（人工客服）${m.content}` : m.content });
 }

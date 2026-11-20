@@ -88,6 +88,8 @@ function argsSummary(args: Record<string, unknown>): string {
 
 export async function runAgentLoop(input: {
   message: string;
+  /** 之前的对话（不含本条），按时间顺序；只放 user / assistant 文本 */
+  history?: ModelMessage[];
   registry: ToolRegistry;
   model: ModelClient;
   ctx: ToolContext;
@@ -103,6 +105,7 @@ export async function runAgentLoop(input: {
   const tools = input.registry.list().filter((tool) => input.registry.enabled(input.ctx.tenantKey, tool.name));
   const messages: ModelMessage[] = [
     { role: 'system', content: SYSTEM },
+    ...(input.history || []).filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content.trim()),
     { role: 'user', content: input.message },
   ];
   const traces: AgentTraceStep[] = [];
