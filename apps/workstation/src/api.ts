@@ -29,10 +29,20 @@ export async function fetchSseTicket(): Promise<string> {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** 429 时服务端给出的剩余等待秒数（Retry-After），没有则为 0 */
+  retryAfter: number;
+  constructor(message: string, status: number, retryAfter = 0) {
     super(message);
     this.status = status;
+    this.retryAfter = retryAfter;
   }
+}
+
+function readRetryAfter(response: Response, data: any): number {
+  const fromBody = Number(data?.data?.retryAfter);
+  if (Number.isFinite(fromBody) && fromBody > 0) return Math.ceil(fromBody);
+  const fromHeader = Number(response.headers.get('retry-after'));
+  return Number.isFinite(fromHeader) && fromHeader > 0 ? Math.ceil(fromHeader) : 0;
 }
 
 export async function requestJson<T = any>(url: string, options?: RequestInit): Promise<T> {
@@ -46,7 +56,13 @@ export async function requestJson<T = any>(url: string, options?: RequestInit): 
     clearAuth();
     window.location.reload();
   }
-  if (!response.ok || !data) throw new ApiError(data?.msg || data?.error || `request failed: ${response.status}`, response.status);
+  if (!response.ok || !data) {
+    throw new ApiError(
+      data?.msg || data?.error || `request failed: ${response.status}`,
+      response.status,
+      response.status === 429 ? readRetryAfter(response, data) : 0,
+    );
+  }
   return (data?.data ?? data) as T;
 }
 
