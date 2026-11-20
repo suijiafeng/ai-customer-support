@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { SessionSummary } from '@assistflow/shared';
+import { isAwaitingHuman, type SessionSummary } from '@assistflow/shared';
 import { fmtTime, type AgentIdentity } from '../api.js';
 import Icon from '../ui/Icon.js';
 import { visitorDisplayName } from '../ui/visitor.js';
@@ -158,7 +158,7 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
     const kw = keyword.trim().toLowerCase();
     // 只收明确转人工、尚未被认领的会话。未认领的 FAQ 对话 status 仍是 bot，
     // 若把它们算进大厅，「全部」会被掏空，数据概览的待跟进（只数 waiting_human）也对不上。
-    const isPool = (s: SessionSummary) => s.status === 'waiting_human';
+    const isPool = (s: SessionSummary) => isAwaitingHuman(s);
     const isClosed = (s: SessionSummary) => isDone(s.status);
     const isMine = (s: SessionSummary) => s.assignedAgentId === agent?.id;
     // 访客最后发言 = 客服欠一条回复（旧后端无此字段时视为已回复，降级不误报）

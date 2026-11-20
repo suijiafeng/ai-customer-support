@@ -13,6 +13,7 @@ import ModelsPanel from './components/ModelsPanel.js';
 import UsersPanel from './components/UsersPanel.js';
 import FaqsPanel from './components/FaqsPanel.js';
 import { FeedbackHost } from './ui/feedback.js';
+import { countAwaitingHuman } from '@assistflow/shared';
 import Icon from './ui/Icon.js';
 
 export default function App() {
@@ -81,10 +82,8 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
     closeQueue();
   }, []);
 
-  const poolCount = useMemo(
-    () => sessions.filter((s) => !s.assignedAgentId && s.status !== 'closed').length,
-    [sessions],
-  );
+  // 与接待大厅同一判定（@assistflow/shared 的 isAwaitingHuman）：只数已转人工、还没人认领的会话
+  const poolCount = useMemo(() => countAwaitingHuman(sessions), [sessions]);
   // 移动端侧栏即抽屉：会话接待时展示队列，数据管理时展示子菜单
   const sideOpen = view === 'sessions' ? queueOpen : systemMenuOpen;
   // 桌面端侧栏宽度：最小 300px，默认占窗口 20%（随窗口缩放），可拖拽调整到最宽 40%，拖过后按浏览器记住

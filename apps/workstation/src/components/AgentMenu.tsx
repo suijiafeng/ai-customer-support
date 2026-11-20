@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { SessionSummary } from '@assistflow/shared';
+import { countAwaitingHuman, type SessionSummary } from '@assistflow/shared';
 import { fmtTime, getLoginAt, type AgentIdentity } from '../api.js';
 import Icon from '../ui/Icon.js';
 import { useHistoryBack } from '../hooks/useHistoryBack.js';
@@ -47,7 +47,7 @@ export default function AgentMenu({ agent, sessions, connected, onLogout, varian
   const myResolved = sessions.filter(
     (s) => s.assignedAgentId === agent.id && s.status === 'closed'
   ).length;
-  const waiting = sessions.filter((s) => s.status === 'waiting_human').length;
+  const waiting = countAwaitingHuman(sessions);
   const loginAt = getLoginAt();
   const initials = agent.id.slice(-2);
   const color = avatarColor();
