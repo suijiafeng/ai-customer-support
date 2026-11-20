@@ -66,8 +66,9 @@ export async function requestJson<T = any>(url: string, options?: RequestInit): 
   if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
   const response = await fetch(`${API}${url}`, { ...options, headers });
   const data = await response.json().catch(() => null);
-  if (response.status === 401 && !url.startsWith('/api/auth/')) {
-    // 登录态失效：清空并回到登录页
+  // 登录接口本身的 401 是「密码错误」，其余（含 /api/auth/me、sse-ticket）都表示登录态已失效
+  if (response.status === 401 && url !== '/api/auth/login') {
+    // 登录态失效（停用 / 删除 / 改密码 / 过期）：清空并回到登录页
     clearAuth();
     window.location.reload();
   }
