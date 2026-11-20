@@ -29,19 +29,30 @@ export class MetricsService implements OnApplicationBootstrap, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
-  recordDaily(): void {
+  /** 按当前内存里的会话实时算出今天的点 */
+  livePoint(now = new Date()): DailyMetricPoint {
     const m = this.buildMetrics();
-    const point: DailyMetricPoint = {
-      date: localDate(),
+    return {
+      date: localDate(now),
       waiting: m.queue.waitingHuman,
       assigned: m.queue.assigned,
       activeSessions: m.workload.activeSessions,
     };
-    this.store.saveDailyMetric(point);
   }
 
-  getTrend(days = 14): Promise<DailyMetricPoint[]> {
-    return this.store.loadDailyMetrics(days);
+  recordDaily(): void {
+    this.store.saveDailyMetric(this.livePoint());
+  }
+
+  /**
+   * 趋势：历史天数用库里的快照，今天用实时值。
+   * 快照约 30 分钟写一次，启动时写的今天往往是 0，图上最后一段会掉到 0，看起来像数据异常。
+   */
+  async getTrend(days = 14, now = new Date()): Promise<DailyMetricPoint[]> {
+    const today = this.livePoint(now);
+    const stored = await this.store.loadDailyMetrics(days);
+    const past = stored.filter((point) => point.date !== today.date);
+    return [...past, today].slice(-days);
   }
 
   buildMetrics(): Metrics {
