@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Subject } from 'rxjs';
 import { appConfig } from '../config.js';
 import {
   signToken,
@@ -23,6 +24,8 @@ export interface AgentAccount {
   role?: AgentRole;
   /** 停用后无法登录；缺省视为启用（兼容旧数据）。 */
   active?: boolean;
+  /** 令牌版本：改密码时加 1，签发时写进 JWT（tv），校验时必须一致。缺省为 0。 */
+  tokenVersion?: number;
 }
 
 /** 脱敏后的账号视图：绝不向外暴露 salt / passwordHash。 */
@@ -37,6 +40,14 @@ export interface AuthenticatedAgent {
   id: string;
   name: string;
   role: AgentRole;
+  /** 签发该凭证时的令牌版本，SSE 长连接据此在每次推送前复核。 */
+  tokenVersion?: number;
+}
+
+/** 账号变更通知：SSE 长连接据此立即复核（停用 / 删除 / 改角色 / 改密码）。 */
+export interface AccountChange {
+  id: string;
+  kind: 'updated' | 'deleted';
 }
 
 /** 仓库与 README 公开的演示口令。生产环境默认不能用它登录。 */
@@ -82,6 +93,8 @@ export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
   private accounts: AgentAccount[] = [];
   private readonly secret = resolveAuthSecret();
+  /** 账号增删改后广播，SSE 连接订阅后按 id 过滤。 */
+  readonly changes$ = new Subject<AccountChange>();
 
   /** 调用时读取，测试可用进程环境变量指向临时目录（构造器保持无参）。 */
   private get dataDir(): string {
@@ -124,7 +137,7 @@ export class AuthService implements OnModuleInit {
     if (plain === DEMO_PASSWORD && !demoCredentialsAllowed()) return null;
     const role: AgentRole = account.role === 'admin' ? 'admin' : 'agent';
     return {
-      token: signToken({ sub: account.id, name: account.name, role }, this.secret),
+      token: this.signFor(account),
       agent: { id: account.id, name: account.name, role },
     };
   }
@@ -133,15 +146,38 @@ export class AuthService implements OnModuleInit {
    * 签名只证明令牌没被篡改。每次请求再对照当前账号：已删除或已停用立即失效，
    * 角色和姓名以账号当前值为准，降级后的旧 token 不能继续当 admin。
    */
-  private agentFromClaims(claims: { sub: string } | null): AuthenticatedAgent | null {
+  private agentFromClaims(claims: { sub: string; tv?: number } | null): AuthenticatedAgent | null {
     if (!claims) return null;
     const account = this.accounts.find((item) => item.id === claims.sub);
     if (!account || account.active === false) return null;
+    // 改过密码的账号，旧令牌（版本号对不上）一律作废
+    const version = account.tokenVersion ?? 0;
+    if ((claims.tv ?? 0) !== version) return null;
     return {
       id: account.id,
       name: account.name,
       role: account.role === 'admin' ? 'admin' : 'agent',
+      tokenVersion: version,
     };
+  }
+
+  private signFor(account: AgentAccount): string {
+    const role: AgentRole = account.role === 'admin' ? 'admin' : 'agent';
+    return signToken({ sub: account.id, name: account.name, role, tv: account.tokenVersion ?? 0 }, this.secret);
+  }
+
+  /**
+   * 长连接复核：按连接建立时的身份（id + 令牌版本）重新对照当前账号。
+   * 停用、删除、改密码后返回 null；改角色后返回新角色。
+   */
+  revalidate(agent: Pick<AuthenticatedAgent, 'id' | 'tokenVersion'>): AuthenticatedAgent | null {
+    return this.agentFromClaims({ sub: agent.id, tv: agent.tokenVersion ?? 0 });
+  }
+
+  /** 给本人重新签发登录令牌（本人改完密码后用，免得把自己踢下线）。 */
+  reissueToken(id: string): string | null {
+    const account = this.accounts.find((a) => a.id === id && a.active !== false);
+    return account ? this.signFor(account) : null;
   }
 
   verify(token: string): AuthenticatedAgent | null {
@@ -233,6 +269,8 @@ export class AuthService implements OnModuleInit {
     if (input?.password !== undefined && String(input.password) !== '') {
       account.salt = randomBytes(16).toString('hex');
       account.passwordHash = hashPassword(AuthService.sanitizePassword(input.password), account.salt);
+      // 改密码 = 让该账号已签发的所有令牌（含 SSE 票据）失效
+      account.tokenVersion = (account.tokenVersion ?? 0) + 1;
     }
     if (input?.active !== undefined) {
       const active = Boolean(input.active);
@@ -245,6 +283,7 @@ export class AuthService implements OnModuleInit {
       account.active = active;
     }
     await this.persistAgents();
+    this.changes$.next({ id: account.id, kind: 'updated' });
     return this.toPublic(account);
   }
 
@@ -262,11 +301,18 @@ export class AuthService implements OnModuleInit {
     }
     this.accounts.splice(idx, 1);
     await this.persistAgents();
+    this.changes$.next({ id, kind: 'deleted' });
     return true;
   }
 
   issueSseTicket(agent: AuthenticatedAgent): string {
-    return signSseTicket({ sub: agent.id, name: agent.name, role: agent.role }, this.secret);
+    // 签发前再对照一次账号：停用 / 改密后旧登录令牌换不到新票据
+    const current = this.revalidate(agent);
+    if (!current) return '';
+    return signSseTicket(
+      { sub: current.id, name: current.name, role: current.role, tv: current.tokenVersion ?? 0 },
+      this.secret
+    );
   }
 
   verifySseTicket(ticket: string): AuthenticatedAgent | null {
