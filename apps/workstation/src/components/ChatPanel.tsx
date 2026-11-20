@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useHistoryBack } from '../hooks/useHistoryBack.js';
-import type { SessionSummary } from '@assistflow/shared';
+import { visitorDisplayName, type SessionSummary } from '@assistflow/shared';
 import MessageList from './MessageList.js';
 import Composer from './Composer.js';
 import SessionDetail from './SessionDetail.js';
@@ -108,6 +108,8 @@ export default function ChatPanel({ session, agent }: ChatPanelProps) {
 
   const pill = STATUS_PILL[session.status] || STATUS_PILL.bot;
   const host = pageHost(session.visitor?.pageUrl);
+  // 与会话列表一致：自动生成的「访客 v-…」统一显示短码，完整标识在 title 和详情栏里
+  const shortName = visitorDisplayName(session.displayName);
 
   return (
     <main className="chat">
@@ -115,10 +117,10 @@ export default function ChatPanel({ session, agent }: ChatPanelProps) {
         <div className="chat-head-main">
           <button
             className="chat-head-name"
-            title={detailVisible ? '收起详情' : '查看会话详情'}
+            title={`${session.displayName}（${detailVisible ? '点击收起详情' : '点击查看会话详情'}）`}
             onClick={toggleDetail}
           >
-            {session.displayName}
+            {shortName}
           </button>
           <span className="chat-head-sub">
             <span className={`conn conn-${connection}`}>{CONNECTION_LABEL[connection] || connection}</span>
@@ -150,7 +152,7 @@ export default function ChatPanel({ session, agent }: ChatPanelProps) {
               <button className="retry-btn" onClick={reload}>重试</button>
             </div>
           ) : (
-            <MessageList messages={messages} customerName={session.displayName} status={status} />
+            <MessageList messages={messages} customerName={shortName} status={status} />
           )}
           {!session.assignedAgentId && session.status !== 'closed' && (
             <div className="claim-hint-bar" role="status">

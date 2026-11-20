@@ -1,8 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { isAwaitingHuman, type SessionSummary } from '@assistflow/shared';
+import { isAwaitingHuman, visitorDisplayName, type SessionSummary } from '@assistflow/shared';
 import { fmtTime, type AgentIdentity } from '../api.js';
 import Icon from '../ui/Icon.js';
-import { visitorDisplayName } from '../ui/visitor.js';
 
 // 列表时间：当天显示 HH:MM，非当天显示 M/D
 function fmtListTime(iso?: string): string {
