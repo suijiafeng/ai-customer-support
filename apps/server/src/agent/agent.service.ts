@@ -21,6 +21,8 @@ export interface AgentTurn {
   handoff: boolean;
   ticket: Ticket | null;
   degraded: boolean;
+  /** 这条待确认操作此前已处理过（重复点击/重放请求）：调用方应幂等返回，不再追加消息 */
+  alreadyHandled?: boolean;
 }
 
 @Injectable()
@@ -70,7 +72,7 @@ export class AgentService {
       return { handled: true, reply: '没有找到这条待确认操作。', traces: [], action: null, handoff: false, ticket: null, degraded: false };
     }
     if (action.status !== 'pending') {
-      return { handled: true, reply: '这条操作已经处理过了。', traces: [], action: { ...action }, handoff: false, ticket: null, degraded: false };
+      return { handled: true, reply: '这条操作已经处理过了。', traces: [], action: { ...action }, handoff: false, ticket: null, degraded: false, alreadyHandled: true };
     }
     if (input.decision === 'cancel') {
       const cancelled = this.actions.mark(action.id, 'cancelled')!;

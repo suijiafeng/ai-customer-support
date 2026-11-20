@@ -354,6 +354,17 @@ export class ChatService {
       tenantKey,
       message: body.decision === 'confirm' ? '访客确认办理' : '访客取消办理',
     });
+    if (turn.alreadyHandled) {
+      // 幂等：连点「确认」或重放请求时，第一次已经落库了结果，这里原样返回当前会话，
+      // 不再追加「这条操作已经处理过了」之类的消息污染聊天记录，也不触发会话更新推送
+      return {
+        sessionId,
+        reply: turn.reply,
+        alreadyHandled: true,
+        session: this.sessions.get(sessionId)!,
+        messages: this.sessions.getMessages(sessionId),
+      };
+    }
     const history = this.sessions.getMessages(sessionId).map((message) => (
       message.agentAction?.id === body.actionId && turn.action
         ? { ...message, agentAction: { ...message.agentAction, status: turn.action.status } }
