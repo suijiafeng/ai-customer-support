@@ -110,9 +110,17 @@ export default `
   padding: 3px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .handoff-bar button:disabled { opacity: .5; cursor: not-allowed; }
 .handoff-bar.queue { justify-content: flex-start; background: #fff7ed; color: #9a3412; }
+/* 排队点：出现时闪 3 下提示状态变了，之后静止，不在角落里一直闪 */
 .queue-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #f97316;
-  animation: afw-blink 1.4s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .queue-dot { animation: none; } }
+  animation: afw-queue-pulse 1.2s ease-in-out 3; }
+@keyframes afw-queue-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
+@media (prefers-reduced-motion: reduce) {
+  .queue-dot { animation: none; }
+  /* 「正在输入」不再闪烁：三个点按深浅静态排开，仍看得出是输入中 */
+  .typing-dots i { animation: none; }
+  .typing-dots i:nth-child(1) { opacity: .4; }
+  .typing-dots i:nth-child(2) { opacity: .7; }
+}
 .composer { margin: 8px 12px 12px; border: 1px solid transparent; border-radius: 12px;
   background: #f1f3f5; transition: border-color .2s, box-shadow .2s, background .2s; }
 .composer:focus-within { background: #fff; border-color: var(--afw-brand); box-shadow: 0 0 0 3px rgba(var(--afw-brand-rgb),.12); }
