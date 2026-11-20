@@ -41,7 +41,7 @@ node scripts/dialog-test.js
 | `AI_ENABLED` | `false` | 关闭或没有 Key 时只用本地 FAQ |
 | `AI_PROVIDER` | 按地址推断，否则 `openai` | 厂商预设 |
 | `AI_API_KEY` | 空 | 也认 `OPENAI_API_KEY`、`DEEPSEEK_API_KEY`。`<PROVIDER>_API_KEY` 优先 |
-| `AI_BASE_URL` / `AI_MODEL` | 预设 | `custom` 必须自填地址和模型名 |
+| `AI_BASE_URL` / `AI_MODEL` | 预设 | 地址不是任何预设时按 `custom` 处理，直接用这个地址和 `AI_MODEL` |
 | `HANDOFF_IDLE_RELEASE_MINUTES` | `10` | 人工静默多久交还 AI。`0` 为永不交还 |
 | `DB_DRIVER` | 有 `DATABASE_URL` 则 postgres，否则 sqlite | `sqlite` / `postgres` / `memory` |
 | `DATABASE_URL` | 空 | Postgres 连接串 |

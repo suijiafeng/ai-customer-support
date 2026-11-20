@@ -79,7 +79,11 @@ export function inferAiProvider(baseUrl: string | undefined): string {
 /** 合并「预设 + 环境变量覆盖 + 旧变量名兜底」，得出最终 AI 连接参数。 */
 export function resolveAiSettings(env: NodeJS.ProcessEnv = process.env) {
   const explicitBaseUrl = env.AI_BASE_URL || env.DEEPSEEK_BASE_URL || '';
-  const provider = env.AI_PROVIDER?.trim() || inferAiProvider(explicitBaseUrl);
+  const requested = env.AI_PROVIDER?.trim() || inferAiProvider(explicitBaseUrl);
+  // 不是预设厂商、但给了 AI_BASE_URL：按「自定义 OpenAI 兼容接口」处理。
+  // 以前这里会得到 localhost / mycorp 之类的名字，模型列表找不到预设，就被换成了 DeepSeek 预留项，
+  // AI_BASE_URL / AI_MODEL 都不生效，AI_API_KEY 还会被发到 api.deepseek.com。
+  const provider = !AI_PROVIDER_PRESETS[requested] && explicitBaseUrl ? 'custom' : requested;
   const preset = AI_PROVIDER_PRESETS[provider];
   const apiKey = env.AI_API_KEY || env.OPENAI_API_KEY || env.DEEPSEEK_API_KEY || '';
   return {

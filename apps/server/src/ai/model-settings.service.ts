@@ -108,7 +108,7 @@ function envEntry(provider: string, model: string): ModelEntry {
 }
 
 /** 无文件或旧格式（v1：defaultProvider/defaultModel/enabled）时的初始列表。 */
-function seedSettings(defaultProvider: string, defaultModel: string): ModelSettings {
+export function seedSettings(defaultProvider: string, defaultModel: string): ModelSettings {
   if (defaultProvider === 'deepseek' || !AI_PROVIDER_PRESETS[defaultProvider]) {
     const ds = reservedDeepSeek(defaultProvider === 'deepseek' ? defaultModel : undefined);
     return { version: 2, defaultId: ds.id, models: [ds] };
