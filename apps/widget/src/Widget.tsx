@@ -155,6 +155,7 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
     send,
     retrySend,
     decideAction,
+    decidingId,
     humanAssigned,
     waitingHuman,
     switchToAi,
@@ -397,8 +398,16 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
                           <p>{m.agentAction.summary}</p>
                           {m.agentAction.demo && <div className="agent-demo">演示数据，不是真实订单系统</div>}
                           <div className="agent-card-actions">
-                            <button type="button" onClick={() => decideAction(m.agentAction!.id, 'cancel')}>取消</button>
-                            <button type="button" className="primary" onClick={() => decideAction(m.agentAction!.id, 'confirm')}>确认</button>
+                            <button type="button" disabled={decidingId !== null} onClick={() => decideAction(m.agentAction!.id, 'cancel')}>取消</button>
+                            <button
+                              type="button"
+                              className="primary"
+                              disabled={decidingId !== null}
+                              aria-busy={decidingId === m.agentAction.id}
+                              onClick={() => decideAction(m.agentAction!.id, 'confirm')}
+                            >
+                              {decidingId === m.agentAction.id ? '处理中…' : '确认'}
+                            </button>
                           </div>
                         </div>
                       )}

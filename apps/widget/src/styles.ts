@@ -208,5 +208,6 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
 .agent-card-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .agent-card-actions button { border: 1px solid #d0d3d7; background: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 .agent-card-actions .primary { border: 0; background: var(--afw-brand); color: #fff; }
+.agent-card-actions button:disabled { opacity: .55; cursor: not-allowed; }
 .agent-card.done { font-size: 12px; color: #3d4249; }
 `;

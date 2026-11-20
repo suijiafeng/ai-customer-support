@@ -387,18 +387,29 @@ export function useChatSession({
   /** 访客主动把会话切回 AI：以一条正常访客消息发出，服务端解除接管后照常回答 */
   const switchToAi = useCallback(() => send('让 AI 先回答', { preferAi: true }), [send]);
 
+  // 正在提交的待确认操作：期间卡片按钮禁用，连点「确认」只发一次请求
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+  const decidingRef = useRef<string | null>(null);
+
   const decideAction = useCallback(async (actionId: string, decision: 'confirm' | 'cancel') => {
     const sid = sessionIdRef.current;
-    if (!sid) return;
-    const data = await requestJson('/api/chat/agent-action', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...visitorAuthHeaders(sid) },
-      body: JSON.stringify({ sessionId: sid, siteKey, tenantId, actionId, decision }),
-    });
-    saveVisitorToken(sid, data?.visitorToken);
-    await activate();
-    setMessages(data.messages || [], true);
-    if (data?.session?.status) setSessionStatus(data.session.status);
+    if (!sid || decidingRef.current) return;
+    decidingRef.current = actionId;
+    setDecidingId(actionId);
+    try {
+      const data = await requestJson('/api/chat/agent-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...visitorAuthHeaders(sid) },
+        body: JSON.stringify({ sessionId: sid, siteKey, tenantId, actionId, decision }),
+      });
+      saveVisitorToken(sid, data?.visitorToken);
+      await activate();
+      setMessages(data.messages || [], true);
+      if (data?.session?.status) setSessionStatus(data.session.status);
+    } finally {
+      decidingRef.current = null;
+      setDecidingId(null);
+    }
   }, [requestJson, setMessages, siteKey, tenantId, activate]);
 
   return {
@@ -418,5 +429,6 @@ export function useChatSession({
     send,
     retrySend,
     decideAction,
+    decidingId,
   };
 }
