@@ -16,6 +16,7 @@ const CONNECTION_LABEL: Record<ConnectionStatus, string> = {
   synced: '消息已同步',
   syncing: '正在同步…',
   reconnecting: '连接中断，重连中…',
+  revoked: '已无权查看，实时更新已停止',
 };
 
 // 会话接待状态标签（头部右侧）

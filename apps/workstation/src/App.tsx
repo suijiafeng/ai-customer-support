@@ -1,5 +1,14 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { clearAuth, getStoredAgent, getToken, type AgentIdentity } from './api.js';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AUTH_RECHECK_EVENT,
+  clearAuth,
+  fetchMe,
+  getStoredAgent,
+  getToken,
+  updateStoredAgent,
+  type AgentIdentity,
+} from './api.js';
+import { showToast } from './ui/feedback.js';
 import { useQueueEvents } from './hooks/useQueueEvents.js';
 import { useHistoryBack } from './hooks/useHistoryBack.js';
 import { useResizableWidth } from './hooks/useResizableWidth.js';
@@ -22,6 +31,8 @@ export default function App() {
     getToken() ? getStoredAgent() : null
   );
 
+  useAuthSync(agent, setAgent);
+
   return (
     <>
       {agent
@@ -30,6 +41,58 @@ export default function App() {
       <FeedbackHost />
     </>
   );
+}
+
+/**
+ * 身份以服务端为准：加载时、窗口重新聚焦时、遇到 403、SSE 推来 role / revoked 时，
+ * 调 GET /api/auth/me 核对一次。角色变了就更新菜单（降级后管理菜单立刻消失）；
+ * 令牌已失效（停用 / 删除 / 改密码）时 requestJson 收到 401 会清空登录态回到登录页。
+ */
+function useAuthSync(agent: AgentIdentity | null, setAgent: (a: AgentIdentity) => void) {
+  const agentRef = useRef(agent);
+  agentRef.current = agent;
+  useEffect(() => {
+    if (!agent) return;
+    let inflight = false;
+    let lastAt = 0;
+    const sync = async (force = false) => {
+      const now = Date.now();
+      if (inflight || (!force && now - lastAt < 2000)) return;
+      inflight = true;
+      lastAt = now;
+      try {
+        const me = await fetchMe();
+        const current = agentRef.current;
+        if (!current) return;
+        if (me.role !== current.role || me.name !== current.name) {
+          const next = { ...current, name: me.name, role: me.role };
+          updateStoredAgent(next);
+          setAgent(next);
+          if (me.role !== current.role) {
+            showToast(me.role === 'admin' ? '你的账号已升级为管理员' : '你的账号已调整为普通客服，管理功能已隐藏', 'info', 5000);
+          }
+        }
+      } catch {
+        /* 网络失败保留现状；401 已由 requestJson 处理 */
+      } finally {
+        inflight = false;
+      }
+    };
+    const onFocus = () => sync();
+    const onVisible = () => { if (document.visibilityState === 'visible') sync(); };
+    const onRecheck = () => sync(true);
+    sync(true);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener(AUTH_RECHECK_EVENT, onRecheck);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener(AUTH_RECHECK_EVENT, onRecheck);
+    };
+    // 只在登录 / 登出时重新挂载监听；角色变化通过 agentRef 读取
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Boolean(agent)]);
 }
 
 type View = 'sessions' | 'system';
@@ -70,6 +133,10 @@ function Workstation({ agent, onLogout }: { agent: AgentIdentity; onLogout: () =
     () => SYSTEM_SUB_VIEWS.filter((sv) => !sv.adminOnly || agent.role === 'admin'),
     [agent.role],
   );
+  // 降级后正停在管理页：退回人人可见的数据概览
+  useEffect(() => {
+    if (!systemSubViews.some((sv) => sv.key === systemSubView)) setSystemSubView('ops');
+  }, [systemSubViews, systemSubView]);
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.sessionId === activeId) || null,

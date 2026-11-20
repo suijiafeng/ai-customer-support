@@ -27,6 +27,21 @@ export async function fetchSseTicket(): Promise<string> {
   return data.ticket;
 }
 
+/**
+ * 「请重新核对身份」信号：遇到 403、SSE 推来 role / revoked 事件时发出，
+ * App 监听后调用 GET /api/auth/me，把被管理员改过的角色同步到界面（失效则回登录页）。
+ */
+export const AUTH_RECHECK_EVENT = 'assistflow:auth-recheck';
+export function requestAuthRecheck() {
+  try { window.dispatchEvent(new Event(AUTH_RECHECK_EVENT)); } catch {}
+}
+
+/** 服务端当前认定的身份（角色以账号当前值为准） */
+export async function fetchMe(): Promise<AgentIdentity> {
+  const data = await requestJson<{ agent: AgentIdentity }>('/api/auth/me');
+  return data.agent;
+}
+
 export class ApiError extends Error {
   status: number;
   /** 429 时服务端给出的剩余等待秒数（Retry-After），没有则为 0 */
@@ -56,6 +71,8 @@ export async function requestJson<T = any>(url: string, options?: RequestInit): 
     clearAuth();
     window.location.reload();
   }
+  // 403：可能是角色刚被降级，界面还停在旧权限。让 App 去服务端核对一次身份
+  if (response.status === 403 && !url.startsWith('/api/auth/')) requestAuthRecheck();
   if (!response.ok || !data) {
     throw new ApiError(
       data?.msg || data?.error || `request failed: ${response.status}`,
@@ -88,6 +105,16 @@ export function saveAuth(token: string, agent: AgentIdentity) {
     localStorage.setItem(AGENT_KEY, JSON.stringify(agent));
     localStorage.setItem(LOGIN_AT_KEY, new Date().toISOString());
   } catch {}
+}
+
+/** 只更新本地缓存的身份（角色 / 姓名），保留现有令牌 */
+export function updateStoredAgent(agent: AgentIdentity) {
+  try { localStorage.setItem(AGENT_KEY, JSON.stringify(agent)); } catch {}
+}
+
+/** 换上新令牌（本人改完密码后服务端会下发一枚新的） */
+export function replaceToken(token: string) {
+  try { localStorage.setItem(TOKEN_KEY, token); } catch {}
 }
 
 export function getLoginAt(): string | null {
