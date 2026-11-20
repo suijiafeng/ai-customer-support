@@ -12,14 +12,15 @@ import {
   Sse,
   UseGuards,
 } from '@nestjs/common';
-import type { Request } from 'express';
-import type { Session } from '@assistflow/shared';
-import { map } from 'rxjs';
+import type { Message, Session } from '@assistflow/shared';
+import { Observable, filter, map } from 'rxjs';
 import { AgentAuthGuard } from '../auth/auth.guard.js';
 import { AuthService, type AuthenticatedAgent } from '../auth/auth.service.js';
 import { MetricsService } from '../metrics/metrics.service.js';
 import { normalizeAttachments, normalizeProfile } from '../common/normalize.js';
-import { SseService } from '../sse/sse.service.js';
+import { REVOKED_EVENT, SseService, type SseMessage } from '../sse/sse.service.js';
+import { SessionAccessGuard, type SessionAccess } from './session-access.guard.js';
+import { toVisitorPayload } from './visitor-view.js';
 import { SessionTicketService } from '../workflow/session-ticket.service.js';
 import { SessionsService } from './sessions.service.js';
 import { AgentAuditService } from '../agent/audit.js';
@@ -41,45 +42,29 @@ export class SessionsController {
     return this.sessions.getSessionsPayload(req.agent as AuthenticatedAgent);
   }
 
+  /**
+   * 接待大厅实时队列。每条推送前按「当前」账号复核（见 SseService.live）：
+   * 停用 / 删除 / 改密码后发 revoked 并断开；降级后发 role 事件并立即按新权限重推一次快照，
+   * 之后只能收到自己能看的会话（不再收到别人名下的会话）。
+   */
   @UseGuards(AgentAuthGuard)
   @Sse('events')
   queueEvents(@Req() req: any) {
     const agent = req.agent as AuthenticatedAgent;
-    return this.sse.queueStream(this.sessions.getSessionsPayload(agent)).pipe(
-      map((event) => ({
-        type: event.type,
-        data:
-          event.type === 'sessions'
-            ? this.sessions.filterPayloadForAgent(event.data as { sessions: any[] }, agent)
-            : (event.data as object),
-      }))
-    );
+    return this.sse.live(this.sse.queueStream(this.sessions.getSessionsPayload(agent)), {
+      initial: agent,
+      recheck: () => this.auth.revalidate(agent),
+      changes$: this.accountChanges(agent.id),
+      project: (event, current) =>
+        event.type === 'sessions'
+          ? { type: 'sessions', data: this.sessions.filterPayloadForAgent(event.data as { sessions: any[] }, current) }
+          : event,
+      onRoleChange: (current) => ({ type: 'sessions', data: this.sessions.getSessionsPayload(current) }),
+    });
   }
 
-  /**
-   * 访客侧读取的准入判定：必须是「本会话的访客」或「有权查看的客服」，二者居一。
-   *
-   * 令牌从两处取：REST 走 `x-visitor-token` 头，SSE 走 `?vt=`
-   * （EventSource 无法自定义请求头，与客服的 ?ticket= 同理）。
-   *
-   * ALLOW_ANON_SESSION_READ=true 可临时放行未携带令牌的请求，仅供存量 widget 灰度期使用；
-   * 一旦线上 widget 都升到会带令牌的版本就应该关掉。默认关闭——安全默认值不该由部署者操心。
-   */
-  private assertVisitorOrAgent(sessionId: string, req: Request) {
-    const agent = this.agentFromRequest(req);
-    if (agent) return agent;
-
-    const token =
-      (req.headers['x-visitor-token'] as string | undefined) ||
-      (req.query?.vt as string | undefined);
-    if (this.auth.verifyVisitorToken(token, sessionId)) return null;
-
-    if (process.env.ALLOW_ANON_SESSION_READ === 'true') return null;
-
-    throw new ForbiddenException({
-      error: 'visitor token required',
-      detail: '会话读取需要出示该会话的访客令牌（x-visitor-token 头或 ?vt= 查询串）',
-    });
+  private accountChanges(agentId: string) {
+    return this.auth.changes$.pipe(filter((change) => change.id === agentId));
   }
 
   @UseGuards(AgentAuthGuard)
@@ -94,37 +79,56 @@ export class SessionsController {
     return { entries: await this.agentAudit.forSession(sessionId) };
   }
 
+  @UseGuards(SessionAccessGuard)
   @Get(':sessionId')
-  async getSession(@Param('sessionId') sessionId: string, @Req() req: Request) {
-    // 注意顺序：先鉴权再查库。反过来会把「会话是否存在」这一位信息泄漏给未授权方，
-    // 攻击者可以据此枚举出哪些 sessionId 是真实存在的。
-    const agent = this.assertVisitorOrAgent(sessionId, req);
+  async getSession(@Param('sessionId') sessionId: string, @Req() req: any) {
+    const { agent } = req.sessionAccess as SessionAccess;
     const { session, messages } = await this.sessions.loadDetail(sessionId);
     if (!session) throw new NotFoundException({ error: 'session not found' });
-    if (agent && !this.sessions.canView(session, agent)) {
-      throw new ForbiddenException({ error: 'session is handled by another agent' });
-    }
     const payload = { session, messages };
-    return agent ? payload : this.redactVisitor(payload);
+    return agent ? payload : toVisitorPayload(payload);
   }
 
+  /**
+   * 单会话实时消息。准入在 SessionAccessGuard 里做（非 200 状态码，EventSource 不会死循环重连）。
+   * 客服连接每条推送前复核：账号失效发 revoked{account_changed}；会话被别的客服认领、
+   * 当前客服已无权查看时发 revoked{session_reassigned} 并断开，之后的消息不会再推给他。
+   * 访客连接只下发白名单字段（visitor-view.ts）。
+   */
+  @UseGuards(SessionAccessGuard)
   @Sse(':sessionId/events')
-  sessionEvents(@Param('sessionId') sessionId: string, @Req() req: Request) {
-    const agent = this.assertVisitorOrAgent(sessionId, req);
-    const session = this.sessions.get(sessionId);
-    if (agent && session && !this.sessions.canView(session, agent)) {
-      throw new ForbiddenException({ error: 'session is handled by another agent' });
-    }
-    return this.sse
-      .sessionStream(sessionId, this.sessions.getSessionPayload(sessionId))
-      .pipe(
-        map((event) => ({
-          type: event.type,
-          data: (agent
-            ? event.data
-            : this.redactVisitor(event.data as { session: Session | null })) as object,
-        }))
+  sessionEvents(@Param('sessionId') sessionId: string, @Req() req: any): Observable<SseMessage> {
+    const { agent } = req.sessionAccess as SessionAccess;
+    const source$ = this.sse.sessionStream(sessionId, this.sessions.getSessionPayload(sessionId));
+    if (!agent) {
+      return source$.pipe(
+        map((event) =>
+          event.type === 'session'
+            ? { type: 'session', data: toVisitorPayload(event.data as { session: Session | null; messages: Message[] }) }
+            : event
+        )
       );
+    }
+    return this.sse.live(source$, {
+      initial: agent,
+      recheck: () => this.auth.revalidate(agent),
+      changes$: this.accountChanges(agent.id),
+      project: (event, current) => {
+        if (event.type !== 'session') return event;
+        const session = (event.data as { session: Session | null })?.session ?? this.sessions.get(sessionId);
+        if (session && !this.sessions.canView(session, current)) {
+          return {
+            type: REVOKED_EVENT,
+            data: {
+              reason: 'session_reassigned',
+              assignedAgentId: session.assignedAgentId ?? null,
+              assignedAgentName: session.assignedAgentName ?? null,
+            },
+          };
+        }
+        return event;
+      },
+    });
   }
 
   @UseGuards(AgentAuthGuard)
@@ -200,6 +204,7 @@ export class SessionsController {
         content,
         agentId: agent.id,
         agentName: agent.name,
+        agentRole: agent.role,
         attachments,
       })
     );
@@ -261,20 +266,5 @@ export class SessionsController {
     if (session.assignedAgentId && session.assignedAgentId !== agent.id) {
       throw new ForbiddenException({ error: 'session is handled by another agent' });
     }
-  }
-
-  private redactVisitor<T extends { session: Session | null }>(payload: T): T {
-    const session = payload.session;
-    if (!session?.visitor) return payload;
-    const { code, createdAt } = session.visitor;
-    return { ...payload, session: { ...session, visitor: { code, createdAt } } };
-  }
-
-  private agentFromRequest(req: Request): AuthenticatedAgent | null {
-    const header = String(req.headers.authorization || '');
-    const bearer = header.startsWith('Bearer ') ? header.slice(7) : '';
-    if (bearer) return this.auth.verify(bearer);
-    const ticket = String((req.query as any)?.ticket || '');
-    return ticket ? this.auth.verifySseTicket(ticket) : null;
   }
 }

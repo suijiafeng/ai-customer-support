@@ -135,6 +135,7 @@ export class SessionsService implements OnModuleInit {
     content: string;
     agentId?: string | null;
     agentName?: string | null;
+    agentRole?: 'agent' | 'admin' | null;
     attachments?: Attachment[];
     clientMessageId?: string | null;
     agentAction?: Message['agentAction'];
@@ -148,6 +149,7 @@ export class SessionsService implements OnModuleInit {
       content: params.content,
       agentId: params.agentId ?? null,
       agentName: params.agentName ?? null,
+      ...(params.agentRole ? { agentRole: params.agentRole } : {}),
       attachments: params.attachments ?? [],
       createdAt: new Date().toISOString(),
       ...(params.agentAction ? { agentAction: params.agentAction } : {}),
