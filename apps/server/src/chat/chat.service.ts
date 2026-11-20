@@ -216,7 +216,12 @@ export class ChatService {
 
     // 租户在「租户管理」里指定了模型就用它，否则（或该模型不可用）用默认模型
     const tenantModelId = this.widgetKeys.get(tenantKey)?.modelId;
-    if (message) {
+    // 路由（详见 docs/reference.md「消息路由」）：
+    // 1. 访客明确要人工（转人工 / 找人工 …）：规则直接处理，不经过 Agent，保证一定能建跟进事项。
+    // 2. 其余消息先给 Agent：只有它真的调用了工具才算接手；模型只回了文字、或第一步就失败，
+    //    都交回下面的普通流程（FAQ 检索 + 人设 + 流式输出 + 转人工规则）。
+    const explicitHandoff = detectIntent(message) === 'human_handoff';
+    if (message && !explicitHandoff) {
       const agentTurn = await this.agent.handleUtterance({ message, sessionId, tenantKey, modelId: tenantModelId, history });
       if (agentTurn?.handled) {
         const assistant = this.sessions.createMessage({

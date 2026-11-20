@@ -121,7 +121,9 @@ export async function runAgentLoop(input: {
       );
     } catch (error) {
       return {
-        handled: true,
+        // 第一步就失败（还没执行任何工具）：交回 ChatService 走 FAQ / 人设 / 转人工的普通流程，
+        // 而不是给访客一句「没能办完」。已经执行过工具时，才由 Agent 自己收尾。
+        handled: step > 0,
         text: '这次没能办完，我先按普通方式回复。需要的话可以说「转人工」。',
         traces,
         pending: null,
@@ -130,7 +132,9 @@ export async function runAgentLoop(input: {
       };
     }
     if (!reply.toolCalls.length) {
-      if (step === 0 && !reply.text.trim()) return { handled: false, text: '', traces, pending: null, handoff: false, degraded: false };
+      // 第一步模型没调用任何工具：说明这句话不是「办事」，Agent 不接。
+      // 以前只要模型回了文字就算处理完，FAQ 检索、人设、流式输出和「转人工」规则全被跳过。
+      if (step === 0) return { handled: false, text: '', traces, pending: null, handoff: false, degraded: false };
       return { handled: true, text: reply.text.trim() || '我暂时没查到能直接办的事。', traces, pending: null, handoff, degraded: false };
     }
     // OpenAI 协议：tool 消息必须回应前一条 assistant 消息里的 tool_calls，并带上同一个 id

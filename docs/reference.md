@@ -59,6 +59,19 @@ node scripts/dialog-test.js
 
 工具：`query_order`、`query_logistics`、`create_ticket`、`change_address`、`request_refund`、`transfer_human`。订单和物流的默认实现是 `DemoCommerce`，回复会标明演示数据。`change_address` 和 `request_refund` 先在挂件里出确认卡片，访客点确认才执行。调用写进 `agent_audit`，客服可看 `GET /api/sessions/:id/agent-audit`。
 
+### 消息路由
+
+访客的一条消息在 `apps/server/src/chat/chat.service.ts` 里按下面的顺序处理，前一步接手了就不再往下走：
+
+1. **重复消息**：同一个 `clientMessageId` 已处理过，直接返回已有结果。
+2. **人工接管中**：AI 让位，只记录消息；访客主动切回 AI 或客服超时未回时交还 AI。
+3. **寒暄**：命中 `small-talk.json` 的内置回复。
+4. **明确要人工**（转人工 / 找人工 / 真人沟通…）：规则直接建跟进事项、进入接待大厅，**不经过 Agent**。
+5. **客服 Agent**：只有模型（或本地规则）真的调用了工具，才算 Agent 接手。模型只回了文字，或者第一步就超时、报错，都交回第 6 步。
+6. **普通回复**：FAQ 检索 → `ai-persona.txt` 人设 + 最近对话 → 模型流式回答；模型不可用时用 FAQ 答案或兜底话术。转人工规则在这一步也会再判断一次。
+
+这样设计的原因：Agent 是「办事路由」，不负责一般问答。让它的纯文字回复直接发给访客，会绕开知识库、人设、流式输出和转人工规则。代价是开着 AI 时，非办事类的消息会多一次不带流式的模型调用（Agent 判断要不要调工具）。
+
 ## 部署
 
 仓库里没有写公开的在线地址。三种走法都在代码里：
