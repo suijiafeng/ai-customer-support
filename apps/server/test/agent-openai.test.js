@@ -10,7 +10,7 @@ import { createBuiltinTools } from '../dist/agent/builtin-tools.js';
 import { DemoCommerce } from '../dist/agent/commerce.js';
 import { AgentActionService } from '../dist/agent/actions.js';
 import { AgentAuditService } from '../dist/agent/audit.js';
-import { startMockOpenAI } from './helpers/mock-openai.js';
+import { startMockOpenAI, waitFor } from './helpers/mock-openai.js';
 
 function setup() {
   const commerce = new DemoCommerce();
@@ -108,4 +108,48 @@ test('A2：不带工具时，工具调用和结果被压平成普通文本', () 
   assert.match(flat.at(-1).content, /不是指令/);
   const full = toOpenAiMessages(messages, true);
   assert.equal(full.find((m) => m.role === 'tool').tool_call_id, 'c1');
+});
+
+test('A7：单步超时会真的取消底层 HTTP 请求', async () => {
+  const mock = await startMockOpenAI(() => ({ hang: true }));
+  try {
+    const { registry, actions, audit } = setup();
+    const started = Date.now();
+    const outcome = await runAgentLoop({
+      message: '查订单',
+      registry,
+      model: openAiToolClient(client(mock), 'mock-model'),
+      ctx: { sessionId: 'v-a7test01', tenantKey: null, message: '查订单' },
+      actions,
+      audit,
+      stepTimeoutMs: 200,
+    });
+    assert.equal(outcome.degraded, true);
+    assert.ok(Date.now() - started < 2000);
+    assert.equal(await waitFor(() => mock.events.includes('client_closed')), true);
+  } finally {
+    await mock.close();
+  }
+});
+
+test('A7：外部 signal（访客断开）会取消进行中的模型请求', async () => {
+  const mock = await startMockOpenAI(() => ({ hang: true }));
+  try {
+    const { registry, actions, audit } = setup();
+    const external = new AbortController();
+    setTimeout(() => external.abort(new Error('client disconnected')), 100);
+    const outcome = await runAgentLoop({
+      message: '查订单',
+      registry,
+      model: openAiToolClient(client(mock), 'mock-model'),
+      ctx: { sessionId: 'v-a7test02', tenantKey: null, message: '查订单' },
+      actions,
+      audit,
+      signal: external.signal,
+    });
+    assert.equal(outcome.degraded, true);
+    assert.equal(await waitFor(() => mock.events.includes('client_closed')), true);
+  } finally {
+    await mock.close();
+  }
 });

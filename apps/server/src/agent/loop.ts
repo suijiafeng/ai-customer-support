@@ -47,16 +47,38 @@ const SYSTEM = [
   '查不到或不属于当前访客的订单，就说明原因，不要编造订单。',
 ].join('\n');
 
-function withTimeout<T>(work: Promise<T>, ms: number, signal: AbortSignal): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms);
-    const onAbort = () => reject(new Error('aborted'));
-    signal.addEventListener('abort', onAbort, { once: true });
-    work.then(
-      (value) => { clearTimeout(timer); resolve(value); },
-      (error) => { clearTimeout(timer); reject(error); },
-    );
+/**
+ * 给一次模型调用加超时，并且真的取消底层请求：
+ * 以前只是让 Promise 先 reject，SDK 请求还在后台跑到结束（继续计费、占连接）。
+ * 外部 signal（如访客断开）也会联动取消。
+ */
+export async function callWithTimeout<T>(
+  work: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+  outer?: AbortSignal,
+): Promise<T> {
+  const step = new AbortController();
+  const onOuterAbort = () => step.abort(outer?.reason ?? new Error('aborted'));
+  if (outer?.aborted) onOuterAbort();
+  else outer?.addEventListener('abort', onOuterAbort, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(`timeout after ${ms}ms`);
+      step.abort(error);
+      reject(error);
+    }, ms);
   });
+  const aborted = new Promise<never>((_, reject) => {
+    if (step.signal.aborted) reject(step.signal.reason);
+    step.signal.addEventListener('abort', () => reject(step.signal.reason), { once: true });
+  });
+  try {
+    return await Promise.race([work(step.signal), timeout, aborted]);
+  } finally {
+    clearTimeout(timer);
+    outer?.removeEventListener('abort', onOuterAbort);
+  }
 }
 
 function argsSummary(args: Record<string, unknown>): string {
@@ -72,6 +94,10 @@ export async function runAgentLoop(input: {
   actions: AgentActionService;
   audit: AgentAuditService;
   maxSteps?: number;
+  /** 访客断开等外部取消 */
+  signal?: AbortSignal;
+  /** 单步超时，默认 TOOL_STEP_TIMEOUT_MS（测试可调小） */
+  stepTimeoutMs?: number;
 }): Promise<LoopOutcome> {
   const maxSteps = input.maxSteps ?? MAX_TOOL_STEPS;
   const tools = input.registry.list().filter((tool) => input.registry.enabled(input.ctx.tenantKey, tool.name));
@@ -81,12 +107,15 @@ export async function runAgentLoop(input: {
   ];
   const traces: AgentTraceStep[] = [];
   let handoff = false;
-  const abort = new AbortController();
 
   for (let step = 0; step < maxSteps; step += 1) {
     let reply: { text: string; toolCalls: ModelToolCall[] };
     try {
-      reply = await withTimeout(input.model.complete({ messages, tools, signal: abort.signal }), TOOL_STEP_TIMEOUT_MS, abort.signal);
+      reply = await callWithTimeout(
+        (signal) => input.model.complete({ messages, tools, signal }),
+        input.stepTimeoutMs ?? TOOL_STEP_TIMEOUT_MS,
+        input.signal,
+      );
     } catch (error) {
       return {
         handled: true,

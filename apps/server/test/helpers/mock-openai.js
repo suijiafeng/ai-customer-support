@@ -35,7 +35,11 @@ export async function startMockOpenAI(handler, { strictTools = true } = {}) {
         return;
       }
       const out = (await handler(body, requests.length)) || {};
-      if (out.hang) return; // 永不响应：用来测超时
+      if (out.hang) {
+        // 永不响应：用来测超时。调用方真的取消时，这条连接会被关掉
+        res.on('close', () => events.push('client_closed'));
+        return;
+      }
       if (out.status && out.status !== 200) {
         res.writeHead(out.status, { 'content-type': 'application/json' });
         res.end(JSON.stringify(out.json || { error: { message: 'mock error' } }));
