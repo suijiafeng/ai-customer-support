@@ -1279,3 +1279,12 @@ button.switch:disabled { opacity: .5; cursor: not-allowed; }
 .chart-error-hint { font-size: 12px; color: #94a3b8; }
 .chart-error-actions { display: flex; gap: 8px; margin-top: 4px; }
 .chart-error .retry-btn { padding: 4px 14px; font-size: 13px; }
+
+/* 图表块下载中：固定高度的骨架 + spinner，避免卡片高度跳动 */
+@keyframes chart-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.chart-loading { width: 100%; display: flex; align-items: center; justify-content: center; border-radius: 8px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%;
+  animation: chart-shimmer 1.4s ease-in-out infinite; }
+.chart-spinner { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #cbd5e1; border-top-color: #0d9488;
+  animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .chart-loading, .chart-spinner { animation: none; } }
