@@ -100,7 +100,14 @@ export class ChatController {
       'X-Accel-Buffering': 'no',
     });
 
+    // 访客关掉页面 / 断网：立即取消上游模型请求，不再白白生成、计费。
+    // 用 res 的 close 判断：响应还没正常结束就关闭，说明是客户端先断开。
+    const abort = new AbortController();
+    res.on('close', () => {
+      if (!res.writableFinished) abort.abort(new Error('client disconnected'));
+    });
     const emit = (event: string, data: unknown) => {
+      if (abort.signal.aborted || res.writableEnded) return;
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
@@ -108,7 +115,8 @@ export class ChatController {
       const result = await this.chat.handleChat(
         body,
         (delta) => emit('delta', { text: delta }),
-        this.clientMeta(req)
+        this.clientMeta(req),
+        abort.signal
       );
       emit('done', this.withVisitorToken(result));
     } catch (error: any) {

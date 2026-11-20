@@ -61,7 +61,9 @@ export class ChatService {
   async handleChat(
     body: any,
     onDelta?: ReplyDeltaHandler,
-    clientMeta?: ClientMeta
+    clientMeta?: ClientMeta,
+    /** 访客断开连接时取消，Agent 和模型请求都会随之中止 */
+    signal?: AbortSignal
   ): Promise<ChatResponse | { error: string }> {
     const message = String(body?.message || '').trim();
     const sessionId = String(body?.sessionId || 'default');
@@ -222,7 +224,7 @@ export class ChatService {
     //    都交回下面的普通流程（FAQ 检索 + 人设 + 流式输出 + 转人工规则）。
     const explicitHandoff = detectIntent(message) === 'human_handoff';
     if (message && !explicitHandoff) {
-      const agentTurn = await this.agent.handleUtterance({ message, sessionId, tenantKey, modelId: tenantModelId, history });
+      const agentTurn = await this.agent.handleUtterance({ message, sessionId, tenantKey, modelId: tenantModelId, history, signal });
       if (agentTurn?.handled) {
         const assistant = this.sessions.createMessage({
           role: 'assistant',
@@ -285,7 +287,8 @@ export class ChatService {
 
     const replyResult = await this.ai.buildReply(
       { message, history, matchedFaqs, intent, handoff, inquiry, ticket, modelId: tenantModelId },
-      onDelta
+      onDelta,
+      signal
     );
     const reply = replyResult.text;
     const nextHistory = this.sessions.appendMessages(

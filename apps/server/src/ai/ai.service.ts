@@ -154,7 +154,10 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async buildReply(params: BuildReplyParams, onDelta?: ReplyDeltaHandler): Promise<ReplyResult> {
+  /**
+   * @param signal 外部取消（访客断开连接）。取消后立即中止上游模型请求，不再继续生成、计费。
+   */
+  async buildReply(params: BuildReplyParams, onDelta?: ReplyDeltaHandler, signal?: AbortSignal): Promise<ReplyResult> {
     const { message, history, matchedFaqs, intent, handoff, inquiry, ticket } = params;
     // 本次回复使用的模型：租户专属优先，不可用时回退默认（整次回复内保持一致）
     const conn = this.modelSettings.getConnectionFor(params.modelId);
@@ -201,11 +204,19 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     ].join('\n\n');
 
     const abort = new AbortController();
-    let timer = setTimeout(() => abort.abort(), AI_TIMEOUT_MS);
+    let timedOut = false;
+    const onTimeout = () => {
+      timedOut = true;
+      abort.abort();
+    };
+    let timer = setTimeout(onTimeout, AI_TIMEOUT_MS);
     const resetTimer = () => {
       clearTimeout(timer);
-      timer = setTimeout(() => abort.abort(), AI_TIMEOUT_MS);
+      timer = setTimeout(onTimeout, AI_TIMEOUT_MS);
     };
+    const onClientAbort = () => abort.abort();
+    if (signal?.aborted) abort.abort();
+    else signal?.addEventListener('abort', onClientAbort, { once: true });
     // 流式已经推给访客的文本：中途失败时保留它，而不是用兜底话术把已显示的内容替换掉
     let streamed = '';
 
@@ -233,6 +244,9 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
             onDelta(delta);
           }
         }
+        // openai SDK 的流在 abort 时不会抛错，而是静默结束迭代：
+        // 不检查的话，超时或访客断开都会被当成「正常答完」，error 为空。
+        if (abort.signal.aborted) throw new Error('stream aborted');
         text = streamed.trim();
       } else {
         const completion = await activeClient.chat.completions.create(
@@ -259,8 +273,12 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         },
       };
     } catch (error: any) {
-      const isTimeout = error?.name === 'AbortError';
-      const formattedError = isTimeout ? `timeout after ${AI_TIMEOUT_MS}ms` : formatAiError(error);
+      const clientGone = Boolean(signal?.aborted) && !timedOut;
+      const formattedError = clientGone
+        ? 'client disconnected'
+        : timedOut
+          ? `timeout after ${AI_TIMEOUT_MS}ms`
+          : formatAiError(error);
       const partial = streamed.trim();
       if (partial) {
         // 访客已经看到前半段：按「AI 已回答但未完整」处理，客服侧 workflow.ai.error 可见原因
@@ -277,6 +295,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       };
     } finally {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onClientAbort);
     }
   }
 
