@@ -54,12 +54,15 @@ test('A1：模型没调工具只回了文字，交回 FAQ + 人设流程', async
 });
 
 test('A1：模型调用了工具，由 Agent 接手', async () => {
-  const res = await server.chat(`v-route-t-${Date.now()}`, '帮我查一下我的订单');
+  const sid = `v-route-t-${Date.now()}`;
+  const res = await server.chat(sid, '帮我查一下我的订单');
   assert.equal(res.status, 201);
   assert.equal(res.data.reply, '工具结果回答');
   assert.equal(res.data.intent, 'agent_tool');
-  const assistant = res.data.messages.at(-1);
-  assert.equal(assistant.agentTrace[0].tool, 'query_order');
+  // 工具调用轨迹只给客服看，访客响应里不带
+  assert.equal(res.data.messages.at(-1).agentTrace, undefined);
+  const detail = await server.detail(sid);
+  assert.equal(detail.data.messages.at(-1).agentTrace[0].tool, 'query_order');
 });
 
 test('A1：Agent 第一步失败，交回普通流程而不是「没能办完」', async () => {

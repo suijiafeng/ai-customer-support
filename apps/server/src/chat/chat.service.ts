@@ -69,6 +69,10 @@ export class ChatService {
   }
 
   /** 该会话是否已有对话记录（内存没有时回源到库，内存淘汰不等于会话不存在） */
+  loadSession(sessionId: string) {
+    return this.sessions.loadDetail(sessionId);
+  }
+
   async sessionHasHistory(sessionId: string): Promise<boolean> {
     const { messages } = await this.sessions.loadDetail(sessionId);
     return messages.length > 0;
@@ -98,7 +102,8 @@ export class ChatService {
       : null;
     const attachments = normalizeAttachments(body?.attachments);
     const clientMessageId = String(body?.clientMessageId || '').slice(0, 64) || null;
-    const tenantKey = String(body?.siteKey || '').trim() || null;
+    // 已有会话一律按它绑定的租户取模型和工具开关；只有新会话才用请求里的 siteKey（控制器已核对过两者一致）
+    const tenantKey = this.sessions.get(sessionId)?.tenantKey || String(body?.siteKey || '').trim() || null;
     const preferAi = body?.preferAi === true;
     let storedHistory = this.sessions.getMessages(sessionId);
     let history = storedHistory.slice(-LIMITS.MAX_AI_HISTORY);
@@ -346,7 +351,8 @@ export class ChatService {
   async decideAgentAction(body: { sessionId: string; actionId: string; decision: 'confirm' | 'cancel'; siteKey?: string | null }) {
     const sessionId = String(body.sessionId || '');
     await this.sessions.loadDetail(sessionId);
-    const tenantKey = String(body.siteKey || '').trim() || null;
+    // 工具开关按会话自己的租户判断，不按请求里的 siteKey
+    const tenantKey = this.sessions.get(sessionId)?.tenantKey || String(body.siteKey || '').trim() || null;
     const turn = await this.agent.decide({
       sessionId,
       actionId: body.actionId,

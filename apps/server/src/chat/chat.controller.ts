@@ -17,6 +17,7 @@ import { appConfig } from '../config.js';
 import { AuthService } from '../auth/auth.service.js';
 import { WidgetKeysService } from '../widget-keys/widget-keys.service.js';
 import { ChatService } from './chat.service.js';
+import { toVisitorChatResponse } from '../sessions/visitor-view.js';
 
 const MAX_MESSAGE_LENGTH = 2000;
 
@@ -35,12 +36,13 @@ export class ChatController {
    * 随对话响应下发访客令牌：会话就是在这一刻建立的，这里是唯一能自然签发的时机。
    * 每次都重新签发 = 顺带续期，活跃访客不会因为 TTL 到期丢掉自己的历史。
    */
-  private withVisitorToken<T>(result: T): T | (T & { visitorToken: string }) {
+  private withVisitorToken<T>(result: T): any {
     // handleChat 也可能返回 { error } 这种没有 sessionId 的形状（如租户校验失败），
     // 那种情况下不签发令牌——没有会话就没有要保护的东西
     const sessionId = (result as { sessionId?: unknown } | null)?.sessionId;
+    // 访客侧响应只下发白名单字段（visitor-view.ts），客服内部判断不出现在公开接口里
     return typeof sessionId === 'string' && sessionId
-      ? { ...result, visitorToken: this.auth.issueVisitorToken(sessionId) }
+      ? toVisitorChatResponse({ ...result, visitorToken: this.auth.issueVisitorToken(sessionId) })
       : result;
   }
 
@@ -54,6 +56,7 @@ export class ChatController {
     // 的窗口期里，不带令牌的第二条请求混进来（A6）
     return this.chat.runExclusive(this.sessionIdOf(body), async () => {
       await this.assertMayWriteSession(body, req);
+      await this.assertSessionTenant(body);
       try {
         return this.withVisitorToken(await this.chat.handleChat(body, undefined, this.clientMeta(req)));
       } catch (error: any) {
@@ -85,6 +88,7 @@ export class ChatController {
     if (!this.auth.verifyVisitorToken(token, sessionId)) {
       throw new ForbiddenException({ error: 'visitor_token_required' });
     }
+    await this.assertSessionTenant(body);
     // 串行：同一条待确认操作连点两次「确认」时，第二次会看到已处理，不会执行两遍
     return this.chat.runExclusive(sessionId, async () => this.withVisitorToken(await this.chat.decideAgentAction({
       sessionId,
@@ -106,6 +110,7 @@ export class ChatController {
   private async streamLocked(body: any, res: Response, req: Request) {
     // 在锁里校验：校验失败时还没写响应头，异常照常变成 JSON 错误响应
     await this.assertMayWriteSession(body, req);
+    await this.assertSessionTenant(body);
 
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -175,6 +180,24 @@ export class ChatController {
       error: 'visitor_token_required',
       detail: '向已有会话发送消息需要出示该会话的访客令牌（x-visitor-token 头）',
     });
+  }
+
+  /**
+   * 会话在第一条消息时绑定到当时的租户（session.tenantKey），之后只能用同一租户的 siteKey 续写。
+   * 否则拿着自己的访客令牌、换成另一个租户的公开 siteKey 发消息，就能把会话改挂到别的租户下，
+   * 绕开原租户的停用状态和工具开关。存量会话没有 tenantKey 的，放行并在本次写入时绑定。
+   */
+  private async assertSessionTenant(body: any) {
+    const sessionId = String(body?.sessionId || '');
+    if (!sessionId) return;
+    const { session } = await this.chat.loadSession(sessionId);
+    const supplied = String(body?.siteKey || '').trim();
+    if (session?.tenantKey && session.tenantKey !== supplied) {
+      throw new ForbiddenException({
+        error: 'session_tenant_mismatch',
+        detail: '该会话属于另一个租户，不能用当前 siteKey 续写',
+      });
+    }
   }
 
   private assertHasContent(body: any) {
