@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { redactRecord } from './redact.js';
 
 export interface DemoOrder {
@@ -38,19 +39,39 @@ export class DemoCommerce implements CommerceAdapter {
     });
   }
 
+  /** 访客 → 其演示订单号。避免每次都遍历全部订单判断「这个访客有没有单」。 */
+  private readonly ownerOrders = new Map<string, string>();
+
+  /**
+   * 给访客发一张演示订单。订单号优先用会话 ID 末 4 位（好读、和已有演示保持一致），
+   * 但不同访客的末 4 位可能相同：以前会直接覆盖别人的订单，等于把 A 的单「转」给了 B。
+   * 现在撞号时改用会话 ID 的哈希，并逐步加长直到不冲突。
+   */
   private ensureOwner(ownerId: string): void {
-    if ([...this.orders.values()].some((order) => order.ownerId === ownerId)) return;
+    if (this.ownerOrders.has(ownerId)) return;
     const tail = ownerId.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase() || 'DEMO';
-    this.orders.set(`DEMO-${tail}01`, {
-      id: `DEMO-${tail}01`,
+    let code = tail;
+    if (this.orders.has(`DEMO-${code}01`)) {
+      const hash = createHash('sha256').update(ownerId).digest('hex').toUpperCase();
+      let len = 6;
+      code = hash.slice(0, len);
+      while (this.orders.has(`DEMO-${code}01`) && len < hash.length) {
+        len += 2;
+        code = hash.slice(0, len);
+      }
+    }
+    const id = `DEMO-${code}01`;
+    this.orders.set(id, {
+      id,
       ownerId,
       status: '已发货',
       phone: '13812348000',
       address: '上海市徐汇区演示路 88 号',
       carrier: '演示快递',
-      tracking: `YT${tail}01`,
+      tracking: `YT${code}01`,
       demo: true,
     });
+    this.ownerOrders.set(ownerId, id);
   }
 
   listOrders(ownerId: string): DemoOrder[] {
