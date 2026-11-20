@@ -135,6 +135,8 @@ button { font-family: inherit; }
 .toast-success { background: #eef8f2; border-color: #b7e0c7; color: #12683f; }
 .toast-warning { background: #fdf6ec; border-color: #f7ddb2; color: #92500e; }
 .toast-error { background: #fdf2f2; border-color: #fecaca; color: #b42318; }
+.toast-count { margin-left: 8px; padding: 0 6px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: rgba(20,24,29,.06); font-variant-numeric: tabular-nums; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 .dialog-overlay { position: fixed; inset: 0; background: rgba(20,24,29,.45); animation: afw-fade .15s ease-out; z-index: 210;
   display: flex; align-items: center; justify-content: center; }

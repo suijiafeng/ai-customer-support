@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 // 用模块级订阅，组件外（如 catch 块）也能直接调用 showToast / confirmDialog。
 
 type ToastKind = 'info' | 'success' | 'warning' | 'error';
-interface ToastItem { id: number; text: string; kind: ToastKind; }
+interface ToastItem { id: number; text: string; kind: ToastKind; count: number; }
 interface ConfirmReq {
   id: number;
   message: string;
@@ -23,14 +23,38 @@ let activeConfirm: ConfirmReq | null = null;
 function emitToasts() { toastSubs.forEach((fn) => fn(toasts)); }
 function emitConfirm() { confirmSubs.forEach((fn) => fn(activeConfirm)); }
 
-export function showToast(text: string, kind: ToastKind = 'info', durationMs = 3000) {
-  const item: ToastItem = { id: ++toastSeq, text, kind };
-  toasts = [...toasts, item];
+/** 同时最多显示的 toast 数：再多就挤掉最早的一条，避免连点时整列堆叠遮住内容 */
+const MAX_TOASTS = 2;
+const toastTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
+function dismissToast(id: number) {
+  const timer = toastTimers.get(id);
+  if (timer) clearTimeout(timer);
+  toastTimers.delete(id);
+  toasts = toasts.filter((t) => t.id !== id);
   emitToasts();
-  setTimeout(() => {
-    toasts = toasts.filter((t) => t.id !== item.id);
+}
+
+function armToast(id: number, durationMs: number) {
+  const timer = toastTimers.get(id);
+  if (timer) clearTimeout(timer);
+  toastTimers.set(id, setTimeout(() => dismissToast(id), durationMs));
+}
+
+export function showToast(text: string, kind: ToastKind = 'info', durationMs = 3000) {
+  // 相同内容的提示合并成一条（显示 ×N），并重新计时，而不是再叠一条
+  const same = toasts.find((t) => t.text === text && t.kind === kind);
+  if (same) {
+    toasts = toasts.map((t) => (t.id === same.id ? { ...t, count: t.count + 1 } : t));
+    armToast(same.id, durationMs);
     emitToasts();
-  }, durationMs);
+    return;
+  }
+  const item: ToastItem = { id: ++toastSeq, text, kind, count: 1 };
+  toasts = [...toasts, item];
+  while (toasts.length > MAX_TOASTS) dismissToast(toasts[0].id);
+  armToast(item.id, durationMs);
+  emitToasts();
 }
 
 export function confirmDialog(
@@ -95,7 +119,10 @@ export function FeedbackHost() {
     <>
       <div className="toast-host" role="status" aria-live="polite">
         {items.map((t) => (
-          <div key={t.id} className={`toast toast-${t.kind}`}>{t.text}</div>
+          <div key={t.id} className={`toast toast-${t.kind}`}>
+            {t.text}
+            {t.count > 1 && <span className="toast-count" aria-label={`第 ${t.count} 次`}>×{t.count}</span>}
+          </div>
         ))}
       </div>
       {confirm && (
