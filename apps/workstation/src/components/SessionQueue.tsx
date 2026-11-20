@@ -180,7 +180,7 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
           (Number(isUnread(b)) - Number(isUnread(a))) ||
           byRecent(a, b)
       );
-    const poolTotal = sessions.filter(isPool).length; // 不受关键字过滤，显示真实待接待数
+    const poolTotal = sessions.filter(isPool).length; // 不受关键字过滤的真实待接待数（搜索时与匹配数一起显示）
     const others = sessions
       .filter((s) => {
         if (isPool(s)) return false;
@@ -221,6 +221,8 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
     setPoolOpen((v) => !v);
   }, []);
 
+  const searching = keyword.trim().length > 0;
+
   const renderItem = (s: SessionSummary) => (
     <SessionItem key={s.sessionId} s={s} active={s.sessionId === activeId} unread={unreadCount(s)} onSelect={onSelect} />
   );
@@ -249,7 +251,14 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
           >
             <Icon name="inbox" size={16} />
             <span className="q-section-title">接待大厅</span>
-            {poolTotal > 0 && <span className="q-num" title={`${poolTotal} 位访客待接待`}>({poolTotal})</span>}
+            {/* 搜索时数字跟着列表走（匹配数/总数），不搜索时就是待接待总数 */}
+            {searching
+              ? poolTotal > 0 && (
+                <span className="q-num" title={`搜索匹配 ${pool.length} 位，共 ${poolTotal} 位访客待接待`}>
+                  ({pool.length}/{poolTotal})
+                </span>
+              )
+              : poolTotal > 0 && <span className="q-num" title={`${poolTotal} 位访客待接待`}>({poolTotal})</span>}
             <span className={`q-caret${poolOpen ? ' open' : ''}`}>▸</span>
           </div>
           <div className={`q-collapse${poolOpen ? ' open' : ''}`} aria-hidden={!poolOpen}>
@@ -257,7 +266,9 @@ export default function SessionQueue({ sessions, activeId, onSelect, open = fals
               <div role="list" className="q-list">
                 {pool.map(renderItem)}
                 {!pool.length && (
-                  <div className="section-empty">{ready ? '暂无待接待客户' : '连接中…'}</div>
+                  <div className="section-empty">
+                    {!ready ? '连接中…' : searching && poolTotal > 0 ? '没有匹配的待接待访客' : '暂无待接待客户'}
+                  </div>
                 )}
               </div>
             </div>
