@@ -198,7 +198,7 @@ export default function ChatPanel({ session, lostSession, onDismissLost, agent }
               <button className="retry-btn" onClick={reload}>重试</button>
             </div>
           ) : (
-            <MessageList messages={messages} customerName={shortName} status={status} />
+            <MessageList messages={messages} customerName={shortName} status={status} currentAgentId={agent.id} />
           )}
           {!session.assignedAgentId && session.status !== 'closed' && (
             <div className="claim-hint-bar" role="status">

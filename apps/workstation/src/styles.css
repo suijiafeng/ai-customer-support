@@ -227,6 +227,12 @@ button { font-family: inherit; }
 .bubble a { color: var(--accent-hover); text-decoration: underline; word-break: break-all; }
 .agent .bubble a { color: #fff; }
 .agent .bubble .md-code { background: rgba(255,255,255,.18); }
+/* 不是自己发的客服消息（管理员插话 / 同事的回复）：同在右侧，但用浅色气泡并写明发送者 */
+.avatar.agent.other { background: var(--st-active-fg); }
+.avatar.agent.admin { background: #475569; }
+.row.other-agent .bubble { background: var(--st-active-bg); color: var(--ink); }
+.row.other-agent .bubble a { color: var(--accent-hover); }
+.row.other-agent .bubble .md-code { background: rgba(15,118,110,.08); }
 .txt { white-space: pre-wrap; }
 .time { font-size: 14px; color: #989a9e; margin: 4px 4px 0; }
 .row.ai .time, .row.agent .time { text-align: right; }
