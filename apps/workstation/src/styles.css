@@ -102,8 +102,8 @@ button { font-family: inherit; }
 .sess-top { display: flex; align-items: center; gap: 6px; }
 .name { flex: 1; font-weight: 500; font-size: 14px; color: var(--side-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prio-tag { flex-shrink: 0; font-size: 12px; font-weight: 600; line-height: 1; color: var(--st-urgent-fg); background: var(--st-urgent-bg); border-radius: 4px; padding: 3px 5px; }
-.human-tag { flex-shrink: 0; font-size: 12px; font-weight: 600; line-height: 1; color: #fff; background: var(--warn); border-radius: 4px; padding: 3px 5px; }
-.mood-tag { flex-shrink: 0; font-size: 14px; line-height: 1; color: #fcd34d; cursor: default; }
+.human-tag { flex-shrink: 0; font-size: 12px; font-weight: 600; line-height: 1; color: var(--st-attention-on-dark); background: transparent; box-shadow: inset 0 0 0 1px rgba(251,191,36,.45); border-radius: 4px; padding: 2px 5px; }
+.mood-tag { flex-shrink: 0; display: inline-flex; font-size: 14px; line-height: 1; color: var(--st-attention-on-dark); cursor: default; }
 .last { display: flex; align-items: center; gap: 8px; color: var(--side-muted); font-size: 13px; margin-top: 4px; opacity: .9; }
 .last-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 接待大厅会话：发送即接待的提示条 */
@@ -572,7 +572,8 @@ body.is-col-resizing, body.is-col-resizing * { cursor: col-resize !important; us
 .section-empty { color: var(--side-muted); font-size: 14px; text-align: center; padding: 18px 12px; }
 /* 时间列：常规显示时钟时间；待人工显示等待时长（橙色，驱动接单） */
 .sess-time { flex-shrink: 0; font-size: 12px; color: var(--side-muted); font-variant-numeric: tabular-nums; }
-.sess-time.waiting { color: #fcd34d; font-weight: 600; }
+/* 等待时长：未超时是普通灰字，超过 SLA 才变警示色 */
+.sess-time.overdue { color: var(--st-attention-on-dark); font-weight: 600; }
 
 /* ---- 会话详情侧栏 ---- */
 .chat-body { flex: 1; display: flex; min-height: 0; }
@@ -666,7 +667,7 @@ body.is-col-resizing, body.is-col-resizing * { cursor: col-resize !important; us
 .ticket-table td.reason { white-space: normal; max-width: 250px; min-width: 180px; }
 .ticket-table .last-msg { max-width: 220px; color: #6c6f72; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ticket-table .ops { display: flex; gap: 6px; flex-wrap: nowrap; }
-.prio-btn { background: var(--st-neutral-bg); border: none; border-radius: 999px; color: var(--st-neutral-fg); cursor: pointer; font-size: 13px; padding: 4px 10px; }
+.prio-btn { background: var(--st-neutral-bg); border: none; border-radius: 4px; color: var(--st-neutral-fg); cursor: pointer; font-size: 12px; font-weight: 500; line-height: 1.4; padding: 3px 6px; }
 .prio-btn.high { background: var(--st-urgent-bg); color: var(--st-urgent-fg); font-weight: 600; }
 .prio-btn:disabled { opacity: .5; cursor: not-allowed; }
 

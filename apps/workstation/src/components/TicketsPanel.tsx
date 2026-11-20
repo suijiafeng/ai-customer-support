@@ -143,13 +143,15 @@ export default function TicketsPanel({ agent, onOpenSession }: TicketsPanelProps
                   <td className="mono"><button className="link-btn" onClick={() => setDetailId(t.id)}>{t.id}</button></td>
                   <td><span className={`tag tag-${STATUS_TAG[t.status]}`}>{STATUS_TEXT[t.status]}</span></td>
                   <td>
+                    {/* 与接待大厅的「急」同一含义（@assistflow/shared urgency.ts）；已解决的不再需要醒目 */}
                     <button
-                      className={`prio-btn${t.priority === 'high' ? ' high' : ''}`}
+                      className={`prio-btn${t.priority === 'high' && t.status !== 'resolved' ? ' high' : ''}`}
                       disabled={t.status === 'resolved' || !canOperate(t)}
-                      title={canOperate(t) ? '点击切换优先级' : '非本人工单'}
+                      title={canOperate(t) ? '点击切换「急 / 普通」' : '非本人工单'}
+                      aria-label={`优先级：${t.priority === 'high' ? '急' : '普通'}`}
                       onClick={() => patch(t, { priority: t.priority === 'high' ? 'normal' : 'high' })}
                     >
-                      {t.priority === 'high' ? <><Icon name="flame" size={12} style={{ marginRight: 3, verticalAlign: 'text-bottom', color: '#ef4444' }} />高</> : '普通'}
+                      {t.priority === 'high' ? '急' : '普通'}
                     </button>
                   </td>
                   <td className="reason">{t.reason}</td>
@@ -219,7 +221,7 @@ function TicketDetail({
         <div className="ticket-modal-head">
           <span className="mono">{ticket.id}</span>
           <span className={`tag tag-${STATUS_TAG[ticket.status]}`}>{STATUS_TEXT[ticket.status]}</span>
-          {ticket.priority === 'high' && <span className="tag tag-warning"><Icon name="flame" size={12} style={{ marginRight: 3, verticalAlign: 'text-bottom' }} />高优先级</span>}
+          {ticket.priority === 'high' && ticket.status !== 'resolved' && <span className="prio-tag">急</span>}
         </div>
         <dl className="ticket-detail">
           <div><dt>事由</dt><dd>{ticket.reason || '—'}</dd></div>

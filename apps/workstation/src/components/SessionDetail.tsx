@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { SessionSummary, Ticket } from '@assistflow/shared';
+import { isUrgentSession, type SessionSummary, type Ticket } from '@assistflow/shared';
 import { fmtTime, intentText, requestJson } from '../api.js';
 import { showToast, confirmDialog } from '../ui/feedback.js';
 import Icon from '../ui/Icon.js';
@@ -82,7 +82,7 @@ export default function SessionDetail({ session, onClose, canResolve = true, doc
               </div>
             )}
             <div><dt>开始时间</dt><dd>{fmtTime(session.createdAt) || '—'}</dd></div>
-            <div><dt>优先级</dt><dd>{session.priority === 'high' ? '高' : '普通'}</dd></div>
+            <div><dt>优先级</dt><dd>{isUrgentSession(session) ? <span className="prio-tag">急</span> : '普通'}</dd></div>
           </dl>
         </section>
 
