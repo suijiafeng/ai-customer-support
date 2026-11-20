@@ -6,7 +6,8 @@ import Icon from '../ui/Icon.js';
 import EmptyState from '../ui/EmptyState.js';
 
 const STATUS_TEXT: Record<string, string> = { open: '待处理', processing: '处理中', resolved: '已解决' };
-const STATUS_TAG: Record<string, string> = { open: 'warning', processing: 'primary', resolved: 'success' };
+// 与会话头部、接待大厅同一色板（styles.css 的 --st-*）：待处理=需要处理、处理中=进行中、已解决=结束（灰）
+const STATUS_TAG: Record<string, string> = { open: 'warning', processing: 'primary', resolved: 'info' };
 
 function fmtDate(iso?: string): string {
   if (!iso) return '—';

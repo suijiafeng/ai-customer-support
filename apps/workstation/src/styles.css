@@ -30,6 +30,17 @@ html, body, #root { height: 100%; margin: 0; }
   --warn: #b45309;
   --warn-soft: #fef3e2;
   --danger: #dc2626;
+
+  /* 状态色板：全站状态标签（会话头部、跟进事项、接待大厅）只用这 5 组。
+     原则：只有「现在就要处理」的状态才用饱和色；进行中用品牌色的浅底；结束/无需处理用灰。 */
+  --st-neutral-bg: #f1f3f5;   --st-neutral-fg: #6c6f72;   /* 已结束 / 已解决 / 普通 */
+  --st-active-bg: #e6f7f5;    --st-active-fg: #0f766e;    /* AI 接待中 / 人工接待 / 处理中 */
+  --st-ok-bg: #eaf7ee;        --st-ok-fg: #15803d;        /* 启用等正向配置状态 */
+  --st-attention-bg: #fef3e2; --st-attention-fg: #b45309; /* 待人工 / 待处理：轮到我们了 */
+  --st-urgent-bg: #dc2626;    --st-urgent-fg: #ffffff;    /* 急：唯一的实心饱和色 */
+  /* 深色侧栏上的同语义颜色 */
+  --st-attention-on-dark: #fbbf24;
+  --st-urgent-on-dark: #f87171;
 }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #3d4249; background: #fff; -webkit-font-smoothing: antialiased; }
 button { font-family: inherit; }
@@ -90,7 +101,7 @@ button { font-family: inherit; }
 .sess-main { flex: 1; min-width: 0; }
 .sess-top { display: flex; align-items: center; gap: 6px; }
 .name { flex: 1; font-weight: 500; font-size: 14px; color: var(--side-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prio-tag { flex-shrink: 0; font-size: 12px; font-weight: 600; line-height: 1; color: #fff; background: var(--danger); border-radius: 4px; padding: 3px 5px; }
+.prio-tag { flex-shrink: 0; font-size: 12px; font-weight: 600; line-height: 1; color: var(--st-urgent-fg); background: var(--st-urgent-bg); border-radius: 4px; padding: 3px 5px; }
 .human-tag { flex-shrink: 0; font-size: 12px; font-weight: 600; line-height: 1; color: #fff; background: var(--warn); border-radius: 4px; padding: 3px 5px; }
 .mood-tag { flex-shrink: 0; font-size: 14px; line-height: 1; color: #fcd34d; cursor: default; }
 .last { display: flex; align-items: center; gap: 8px; color: var(--side-muted); font-size: 13px; margin-top: 4px; opacity: .9; }
@@ -155,10 +166,10 @@ button { font-family: inherit; }
 .role-badge { margin-left: 6px; padding: 2px 7px; border-radius: 8px; font-size: 12px;
   font-weight: 600; color: #fff; background: #d97706; }
 .tag { font-size: 12px; padding: 3px 10px; border-radius: 999px; line-height: 18px; display: inline-block; font-weight: 500; box-shadow: inset 0 0 0 1px rgba(20,24,29,.06); }
-.tag-info { background: #f8f9fa; color: #989a9e; }
-.tag-warning { background: #fffbeb; color: #e6a23c; }
-.tag-success { background: #f0f9eb; color: #16a34a; }
-.tag-primary { background: #e6f7f5; color: #0d9488; }
+.tag-info { background: var(--st-neutral-bg); color: var(--st-neutral-fg); }
+.tag-warning { background: var(--st-attention-bg); color: var(--st-attention-fg); }
+.tag-success { background: var(--st-ok-bg); color: var(--st-ok-fg); }
+.tag-primary { background: var(--st-active-bg); color: var(--st-active-fg); }
 .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #989a9e; font-size: 16px; padding: 40px 16px; gap: 8px; height: 100%; }
 .empty-hint-mobile { display: none; }
 /* 统一空状态：线性插画 + 标题 + 说明 + 描边动作按钮 */
@@ -188,10 +199,10 @@ button { font-family: inherit; }
 .chat-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 /* 接待状态标签：AI=浅青、待人工=琥珀、人工=实心青、结束=灰 */
 .status-pill { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.status-pill--ai { background: var(--accent-soft); color: var(--accent-hover); }
-.status-pill--warn { background: var(--warn-soft); color: var(--warn); }
-.status-pill--human { background: var(--accent); color: #fff; }
-.status-pill--muted { background: var(--surface-muted); color: var(--ink-3); }
+.status-pill--ai { background: var(--st-active-bg); color: var(--st-active-fg); }
+.status-pill--warn { background: var(--st-attention-bg); color: var(--st-attention-fg); }
+.status-pill--human { background: var(--st-active-bg); color: var(--st-active-fg); }
+.status-pill--muted { background: var(--st-neutral-bg); color: var(--st-neutral-fg); }
 .head-icon-btn { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink-3); cursor: pointer; transition: background .12s, color .12s, border-color .12s; }
 .head-icon-btn:hover { color: var(--ink); border-color: #d0d3d7; }
 .head-icon-btn.active { background: var(--accent-soft); border-color: transparent; color: var(--accent-hover); }
@@ -655,8 +666,8 @@ body.is-col-resizing, body.is-col-resizing * { cursor: col-resize !important; us
 .ticket-table td.reason { white-space: normal; max-width: 250px; min-width: 180px; }
 .ticket-table .last-msg { max-width: 220px; color: #6c6f72; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ticket-table .ops { display: flex; gap: 6px; flex-wrap: nowrap; }
-.prio-btn { background: #f1f3f5; border: none; border-radius: 999px; color: #6c6f72; cursor: pointer; font-size: 14px; padding: 4px 10px; }
-.prio-btn.high { background: #fef2f2; color: #dc2626; }
+.prio-btn { background: var(--st-neutral-bg); border: none; border-radius: 999px; color: var(--st-neutral-fg); cursor: pointer; font-size: 13px; padding: 4px 10px; }
+.prio-btn.high { background: var(--st-urgent-bg); color: var(--st-urgent-fg); font-weight: 600; }
 .prio-btn:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ---- 跟进事项：工具栏 / 归属 / 详情弹窗 ---- */
@@ -1080,9 +1091,9 @@ body.is-col-resizing, body.is-col-resizing * { cursor: col-resize !important; us
 .link-btn:disabled { opacity: .4; cursor: not-allowed; }
 .link-btn.danger { color: #b42318; }
 .link-btn.danger:hover:not(:disabled) { background: #fef2f2; }
-.tag-green { background: #eaf7ee; color: #15803d; }
-.tag-gray { background: #f1f3f5; color: #6c6f72; }
-.tag-brand { background: #e6f7f5; color: #0d9488; }
+.tag-green { background: var(--st-ok-bg); color: var(--st-ok-fg); }
+.tag-gray { background: var(--st-neutral-bg); color: var(--st-neutral-fg); }
+.tag-brand { background: var(--st-active-bg); color: var(--st-active-fg); }
 .row-actions { white-space: nowrap; }
 
 /* 通用数据表（复用 ticket-table 视觉） */
