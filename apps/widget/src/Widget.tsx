@@ -49,6 +49,10 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
   const [input, setInput] = useState('');
   const [pending, setPending] = useState<PendingImage[]>([]); // 待发送图片附件
   const [showQuick, setShowQuick] = useState(false);
+  // 触屏设备（手机/平板）没有物理 Enter/Shift，占位文字不提键盘快捷键；软键盘回车键显示为「发送」
+  const [touch] = useState(
+    () => typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none) and (pointer: coarse)').matches,
+  );
   const [unread, setUnread] = useState(0); // 关闭状态下收到的新回复数（FAB 红点）
   const seenInboundRef = useRef(0); // 已读的 AI/客服消息数
   const baselinedRef = useRef(false); // 首次同步完成后才开始计增量，避免历史消息触发红点
@@ -508,7 +512,8 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
             <div className="composer">
               <textarea
                 rows={2}
-                placeholder="输入消息，Enter 发送…"
+                placeholder={touch ? '输入消息…' : '输入消息，Enter 发送…'}
+                enterKeyHint="send"
                 ref={taEl}
                 value={input}
                 maxLength={2000}

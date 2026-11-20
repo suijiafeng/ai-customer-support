@@ -193,7 +193,8 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
 .afw.mobile { right: 0; bottom: 0; }
 .afw.mobile .fab { position: fixed; right: 18px; bottom: calc(44px + env(safe-area-inset-bottom, 0px)); }
 .afw.mobile .panel {
-  position: fixed; inset: 0; width: 100vw; height: 100dvh; border-radius: 0; bottom: 0;
+  /* 浮窗的 1px 边框在全屏时会把面板撑到 100vw + 2px，出现横向溢出：全屏去掉边框并按 border-box 计算 */
+  position: fixed; inset: 0; width: 100%; height: 100dvh; border: 0; border-radius: 0; bottom: 0; box-sizing: border-box;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .afw.mobile .col { max-width: 82%; }
