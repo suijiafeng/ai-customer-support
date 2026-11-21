@@ -35,7 +35,7 @@ export default `
 @keyframes afw-fade { from { opacity: 0; } to { opacity: 1; } }
 /* 面板：桌面端为右下角浮窗（无遮罩，宿主页面保持可用；移动端全屏见 .afw.mobile 覆盖） */
 .panel { position: fixed; inset: auto 20px 24px auto; margin: 0;
-  width: min(480px, calc(100vw - 40px)); height: min(720px, calc(100vh - 100px));
+  width: min(480px, calc(100vw - 40px)); height: min(600px, calc(100dvh - 120px));
   background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
   box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 12px 28px rgba(0,0,0,.1);
   display: flex; flex-direction: column; overflow: hidden; z-index: 2147483002;
@@ -156,6 +156,7 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
 .imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .imgs img { max-width: 140px; max-height: 140px; border-radius: 12px; cursor: pointer; display: block; }
 .image-link { padding: 0; border: 0; background: transparent; cursor: pointer; }
+.handoff-tool { flex: none; padding: 4px 6px; font-size: 12px; color: var(--afw-brand); }
 .toolbar { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .tool { background: transparent; border: none; font-size: 18px; cursor: pointer; line-height: 1; color: #6c6f72;
   width: 30px; height: 30px; padding: 0; border-radius: 8px; transition: background .15s;

@@ -40,7 +40,6 @@ const QUICK_MESSAGES = [
   '咨询项目前需要准备什么？',
   '合作流程是什么？',
   '是否有最低合作预算？',
-  '最近有档期吗？',
   '如何联系你？',
 ];
 
@@ -348,7 +347,7 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
                 {messages.length === 0 && (
                   <>
                     <div className="hint">
-                      你好呀，我是开发者的智能助手<br />有什么想了解的直接问我，或点下方快捷提问
+                      您好，欢迎使用在线客服。<br />您可以输入问题、选用快捷提问，或转接人工客服。
                     </div>
                     {/* 快捷提问平铺成标签：点击填入输入框（与工具栏里的快捷提问弹层行为一致） */}
                     <div className="quick-chips" aria-label="快捷提问">
@@ -545,6 +544,12 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
                       </button>
                       <input type="file" accept="image/*" multiple hidden ref={fileEl} onChange={onPickFiles} />
                     </>
+                  )}
+                  {!humanAssigned && !waitingHuman && (
+                    <button type="button" className="tool handoff-tool" style={{ width: 'auto' }}
+                      disabled={sending || cooldown > 0} onClick={() => void send('转人工', { preserveDraft: true })}>
+                      转人工
+                    </button>
                   )}
                   <span className="key-hint">Shift + Enter 换行</span>
                 </div>
