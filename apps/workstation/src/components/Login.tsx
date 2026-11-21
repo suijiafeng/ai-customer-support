@@ -158,7 +158,7 @@ export default function Login({ onLogin }: LoginProps) {
           <h2 className="login-card-title">客服工作台</h2>
           <p className="login-tip">请使用客服工号签到上岗</p>
           {demoLogin && (
-            <button type="button" onClick={() => { setAgentNo('9527'); setPassword('123456'); }}>
+            <button type="button" className="login-demo-fill" onClick={() => { setAgentNo('9527'); setPassword('123456'); }}>
               填入演示账号
             </button>
           )}

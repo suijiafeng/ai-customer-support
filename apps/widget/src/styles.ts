@@ -156,12 +156,13 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
 .imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .imgs img { max-width: 140px; max-height: 140px; border-radius: 12px; cursor: pointer; display: block; }
 .image-link { padding: 0; border: 0; background: transparent; cursor: pointer; }
-.handoff-tool { flex: none; padding: 4px 6px; font-size: 12px; color: var(--afw-brand); }
 .toolbar { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .tool { background: transparent; border: none; font-size: 18px; cursor: pointer; line-height: 1; color: #6c6f72;
   width: 30px; height: 30px; padding: 0; border-radius: 8px; transition: background .15s;
   display: flex; align-items: center; justify-content: center; }
 .tool:hover, .tool.active { background: var(--afw-brand-soft); color: var(--afw-brand); }
+.tool.handoff-tool { flex: none; width: auto; padding: 4px 6px; font-size: 12px; color: var(--afw-brand); }
+.tool.handoff-tool:disabled { opacity: .55; cursor: not-allowed; }
 .key-hint { margin-left: 4px; color: #94a3b8; font-size: 12px; white-space: nowrap; }
 .cooldown-bar { margin: 0 10px 8px; padding: 8px 12px; font-size: 14px; line-height: 1.4;
   color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; }
@@ -171,7 +172,7 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
 .quick-chips { margin: 4px 2px 0; }
 .quick-chips-label { display: block; font-size: 12px; color: #989a9e; margin: 0 2px 6px; }
 .quick-chips-row { display: flex; flex-wrap: wrap; gap: 6px; }
-.quick-chip { border: 1px solid transparent; background: var(--afw-brand-soft); color: var(--afw-brand); border-radius: 6px; }
+.quick-chip { border: 1px solid transparent; background: var(--afw-brand-soft); color: var(--afw-brand); border-radius: 6px;
   padding: 6px 12px; font-size: 13px; cursor: pointer; font-family: inherit; transition: filter .12s; }
 .quick-chip:hover { filter: brightness(.96); }
 .previews { display: flex; gap: 8px; padding: 8px 10px 0; flex-wrap: wrap; }
@@ -209,7 +210,8 @@ textarea { box-sizing: border-box; width: 100%; min-height: 56px; max-height: 12
 .afw.mobile .col { max-width: 82%; }
 .afw.mobile .emoji-pop { bottom: 96px; }
 .afw.mobile .key-hint { display: none; }
-.afw.mobile .tool { width: 36px; height: 36px; }
+.afw.mobile .tool { height: 36px; }
+.afw.mobile .tool:not(.handoff-tool) { width: 36px; }
 .afw.mobile .quick-pop { left: 0; right: 0; max-width: 100%; border-radius: 12px 12px 0 0; bottom: 100px; }
 .agent-card { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--afw-brand); border-radius: 10px; background: var(--afw-brand-soft); color: #1a1d21; }
 .agent-card-title { font-weight: 600; margin-bottom: 4px; }
