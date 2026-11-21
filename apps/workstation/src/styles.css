@@ -1223,6 +1223,22 @@ body.is-col-resizing, body.is-col-resizing * { cursor: col-resize !important; us
   font-size: 14px;
   color: #64748b;
 }
+.login-demo-fill {
+  align-self: flex-start;
+  min-height: 36px;
+  margin-top: 12px;
+  padding: 4px 12px;
+  border: 1px solid #a7dcd6;
+  border-radius: 8px;
+  background: #f0fdfa;
+  color: #115e59;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.login-demo-fill:hover { background: #ccfbf1; }
+.login-demo-fill:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
 .login-field {
   display: flex;
   flex-direction: column;

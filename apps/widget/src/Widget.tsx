@@ -40,7 +40,7 @@ const QUICK_MESSAGES = [
   '咨询项目前需要准备什么？',
   '合作流程是什么？',
   '是否有最低合作预算？',
-  '如何联系你？',
+  '如何联系客户服务？',
 ];
 
 export default function Widget({ apiBase, title, siteKey, tenantId, theme }: WidgetProps) {
@@ -546,7 +546,7 @@ export default function Widget({ apiBase, title, siteKey, tenantId, theme }: Wid
                     </>
                   )}
                   {!humanAssigned && !waitingHuman && (
-                    <button type="button" className="tool handoff-tool" style={{ width: 'auto' }}
+                    <button type="button" className="tool handoff-tool"
                       disabled={sending || cooldown > 0} onClick={() => void send('转人工', { preserveDraft: true })}>
                       转人工
                     </button>
