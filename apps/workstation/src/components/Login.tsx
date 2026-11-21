@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { login, type AgentIdentity } from '../api.js';
+import { API, login, type AgentIdentity } from '../api.js';
 import loginBg from '../assets/login-bg.webp';
 
 interface LoginProps {
@@ -43,6 +43,19 @@ export default function Login({ onLogin }: LoginProps) {
   const [loading, setLoading] = useState(false);
   // 登录限速（每分钟 5 次）触发后的剩余秒数：倒计时期间提示还要等多久，并禁用提交
   const [waitSeconds, setWaitSeconds] = useState(0);
+  const [demoLogin, setDemoLogin] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`${API}/api/auth/demo-login`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!controller.signal.aborted) setDemoLogin(data?.enabled === true);
+      })
+      .catch(() => { if (!controller.signal.aborted) setDemoLogin(false); });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (waitSeconds <= 0) return;
@@ -144,6 +157,11 @@ export default function Login({ onLogin }: LoginProps) {
         <form className="login-card" onSubmit={submit}>
           <h2 className="login-card-title">客服工作台</h2>
           <p className="login-tip">请使用客服工号签到上岗</p>
+          {demoLogin && (
+            <button type="button" onClick={() => { setAgentNo('9527'); setPassword('123456'); }}>
+              填入演示账号
+            </button>
+          )}
 
           <label className="login-field">
             工号

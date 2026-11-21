@@ -128,7 +128,7 @@ export default function MetricsPanel() {
               { label: '待跟进', value: metrics.queue.waitingHuman, attention: metrics.queue.waitingHuman > 0 },
               { label: '待处理工单', value: metrics.tickets.open, attention: metrics.tickets.open > 0 },
               { label: '处理中工单', value: metrics.tickets.processing },
-              { label: 'AI 解决率', value: `${metrics.ai.automationRate}%` },
+              { label: 'AI 解决率', value: metrics.totals.sessions > 0 ? `${metrics.ai.automationRate}%` : '—' },
             ].map((s) => (
               <div key={s.label} className="stat">
                 <span className="stat-label">
@@ -182,7 +182,7 @@ export default function MetricsPanel() {
                 <h3>每日趋势</h3>
                 <span className="chart-sub">近 {MAX_DAYS} 天</span>
               </div>
-              {lineHasData ? <EChart option={lineOption} height={TREND_H} /> : <ChartEmpty height={TREND_H} text="正在采集数据…" />}
+              {lineHasData ? <EChart option={lineOption} height={TREND_H} /> : <ChartEmpty height={TREND_H} />}
             </section>
           </div>
         </>

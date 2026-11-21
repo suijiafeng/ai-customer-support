@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Post, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AgentAuthGuard } from './auth.guard.js';
 import { AuthService, type AuthenticatedAgent } from './auth.service.js';
@@ -7,6 +7,12 @@ import { AuthService, type AuthenticatedAgent } from './auth.service.js';
 @Controller('api/auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
+
+  @Header('Cache-Control', 'no-store')
+  @Get('demo-login')
+  demoLogin() {
+    return { enabled: this.auth.hasDemoLogin() };
+  }
 
   @UseGuards(ThrottlerGuard)
   @Throttle({ login: { ttl: 60000, limit: 5 } })

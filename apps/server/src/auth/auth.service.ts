@@ -127,6 +127,22 @@ export class AuthService implements OnModuleInit {
     }
   }
 
+  private demoCredentialCheck?: { salt: string; hash: string; valid: boolean };
+
+  hasDemoLogin(): boolean {
+    if (!appConfig.demoEnabled || !demoCredentialsAllowed()) return false;
+    const account = this.accounts.find((item) => item.id === '9527' && item.active !== false);
+    if (!account) return false;
+    if (this.demoCredentialCheck?.salt !== account.salt || this.demoCredentialCheck?.hash !== account.passwordHash) {
+      this.demoCredentialCheck = {
+        salt: account.salt,
+        hash: account.passwordHash,
+        valid: verifyPassword(DEMO_PASSWORD, account.salt, account.passwordHash),
+      };
+    }
+    return this.demoCredentialCheck.valid;
+  }
+
   login(agentNo: string, password: string): { token: string; agent: AuthenticatedAgent } | null {
     const account = this.accounts.find((item) => item.id === String(agentNo || '').trim());
     const plain = String(password || '');

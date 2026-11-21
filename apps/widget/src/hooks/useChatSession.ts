@@ -196,13 +196,13 @@ export function useChatSession({
   }, [siteKey, activate]);
 
   const send = useCallback(
-    async (textOverride?: string, options?: { preferAi?: boolean; rotated?: boolean }) => {
+    async (textOverride?: string, options?: { preferAi?: boolean; rotated?: boolean; preserveDraft?: boolean }) => {
       const text = (textOverride ?? input).trim();
       if ((!text && pending.length === 0) || sendingRef.current) return;
       // 前端先拦截：发送过快时保留输入框内容、不发请求，只给倒计时；后端为最后一道防线
       if (!checkRateLimit()) return;
 
-      const attachments = pending;
+      const attachments = options?.preserveDraft ? [] : pending;
       sendingRef.current = true;
       setSending(true);
       // 服务端拒绝续写（缺访客令牌）：换新会话身份重发一次；只换一次，避免无限循环
@@ -226,8 +226,10 @@ export function useChatSession({
         const aiMsgId = newId();
         inflightRef.current = { userId: userMsgId, aiId: aiMsgId };
         const now = new Date().toISOString();
-        setInput('');
-        clearPending();
+        if (!options?.preserveDraft) {
+          setInput('');
+          clearPending();
+        }
         onSendStart?.();
         resetAtBottom();
         setMessagesState((m) => [

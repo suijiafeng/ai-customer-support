@@ -17,6 +17,7 @@
     "start:dev": "npm run dev:all",
     "start:prod": "npm run build && node --experimental-sqlite --disable-warning=ExperimentalWarning apps/server/dist/main.js",
     "start:demo": "npm run build && concurrently --kill-others -n server,demo -c green,yellow \"node --experimental-sqlite --disable-warning=ExperimentalWarning apps/server/dist/main.js\" \"npm run preview --workspace assistflow-demo\"",
+    "pretest": "npm run build --workspace @assistflow/shared",
     "test": "npm test --workspace @assistflow/server",
     "smoke": "node scripts/smoke-test.js",
     "kb:drafts": "node scripts/miss-to-faq.js",
